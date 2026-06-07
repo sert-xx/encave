@@ -11,6 +11,12 @@ import (
 
 func init() { register(Codex{}) }
 
+// codexPersonalSubdirs are home subdirectories that hold the user's own settings
+// rather than the agent author's: Codex "rules" stores locally-approved commands.
+// These are never packaged — they are symlinked from the user's base home at
+// launch so each user's approvals apply to (and accumulate across) every agent.
+var codexPersonalSubdirs = []string{"rules"}
+
 // Codex is the adapter for the Codex CLI, encave's first target.
 //
 // Key facts the adapter encodes (verify against current Codex docs before
@@ -130,9 +136,10 @@ func (Codex) BuildLaunch(req LaunchRequest) (LaunchSpec, error) {
 }
 
 // ScaffoldExcludes implements Adapter. Best-effort removal of secrets, state,
-// logs and regenerable artifacts when copying a user's ~/.codex into a draft.
+// logs, regenerable artifacts, and the user's personal subdirs when copying a
+// user's ~/.codex into a new agent.
 func (Codex) ScaffoldExcludes() []string {
-	return []string{
+	out := []string{
 		"auth.json",       // OpenAI/login credentials
 		"history.jsonl",   // prompt history
 		"*.session.jsonl", // session transcripts
@@ -147,11 +154,18 @@ func (Codex) ScaffoldExcludes() []string {
 		"version.json", // regenerable metadata
 		".git",         // never copy a stray repo from the base home
 	}
+	// Personal subdirs (e.g. rules) are linked at launch, never packaged.
+	return append(out, codexPersonalSubdirs...)
+}
+
+// PersonalSubdirs implements Adapter.
+func (Codex) PersonalSubdirs() []string {
+	return append([]string(nil), codexPersonalSubdirs...)
 }
 
 // GitignoreLines implements Adapter.
 func (Codex) GitignoreLines() []string {
-	return []string{
+	out := []string{
 		"# encave: never commit Codex credentials or local state",
 		"auth.json",
 		"history.jsonl",
@@ -163,7 +177,12 @@ func (Codex) GitignoreLines() []string {
 		"cache/",
 		".cache/",
 		"tmp/",
+		"# encave: personal settings — symlinked from your base home at launch",
 	}
+	for _, sub := range codexPersonalSubdirs {
+		out = append(out, sub+"/")
+	}
+	return out
 }
 
 // tomlString renders s as a TOML basic string literal (with surrounding quotes

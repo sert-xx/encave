@@ -71,9 +71,16 @@ type Adapter interface {
 	BuildLaunch(req LaunchRequest) (LaunchSpec, error)
 
 	// ScaffoldExcludes returns path/glob patterns to drop when copying a user's
-	// home into a new draft (best-effort initial cleaning; the real gate is the
+	// home into a new agent (best-effort initial cleaning; the real gate is the
 	// publish-time scan).
 	ScaffoldExcludes() []string
+
+	// PersonalSubdirs returns home subdirectories that hold the *user's own*
+	// settings rather than the agent author's — e.g. Codex "rules"
+	// (locally-approved commands). These are never packaged; instead the launcher
+	// symlinks each one from the user's base home into the agent home at launch,
+	// so every agent uses (and updates) the user's personal settings.
+	PersonalSubdirs() []string
 
 	// GitignoreLines returns recommended .gitignore entries for a published
 	// agent of this target.

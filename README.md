@@ -167,6 +167,15 @@ encave auth status --global                # shows "set" / "not set" only — ne
 encave auth clear --global
 ```
 
+### Personal settings (`rules`)
+
+Some home subdirectories hold *your own* settings rather than the agent author's
+— for Codex, `rules` (your locally-approved commands). encave never packages
+these: `new` excludes them and `publish` gitignores them. Instead, at launch it
+symlinks the agent's `rules` to your base home's `~/.codex/rules`, so your
+personal approvals apply to every agent and any new approvals accumulate in one
+place. (An agent that already ships a real `rules/` directory is left untouched.)
+
 ### Creating and sharing an agent
 
 An agent's name **is** its GitHub identity (`<owner>/<repo>`), so `new` and
@@ -223,6 +232,7 @@ encave publish dai/review-agent --tag v1.0.0 --remote git@github.com:dai/review-
     ├── config.toml              # non-secret config (provider, env_key NAME, wire_api)
     ├── .encave.toml             # non-secret agent metadata (target adapter)
     ├── agents/ skills/ ...       # orchestration + skills, vendored for self-containment
+    ├── rules -> ~/.codex/rules  # personal settings: symlinked at launch, never packaged
     └── (auth.json never present; .gitignored)
 ```
 
