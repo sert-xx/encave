@@ -60,6 +60,13 @@ func AddAll(dir string) error {
 	return err
 }
 
+// AddPaths stages only the given paths (relative to dir).
+func AddPaths(dir string, paths ...string) error {
+	args := append([]string{"add", "--"}, paths...)
+	_, err := Run(dir, args...)
+	return err
+}
+
 // StagedFiles returns the repo-relative paths of files currently staged.
 func StagedFiles(dir string) ([]string, error) {
 	out, err := Run(dir, "diff", "--cached", "--name-only", "-z")
