@@ -25,8 +25,11 @@ func cmdPublish(args []string) int {
 	remote := fs.String("remote", "", "set 'origin' to this URL if not already configured")
 	noTag := fs.Bool("no-tag", false, "commit without creating a tag")
 	force := fs.Bool("force", false, "DANGER: commit even if the secret scan finds something")
+	yes := fs.Bool("yes", false, "skip the push confirmation prompt and push (for automation)")
+	fs.BoolVar(yes, "y", false, "shorthand for --yes")
+	noPush := fs.Bool("no-push", false, "commit and tag only; never push")
 	fs.Usage = func() {
-		fmt.Fprintln(os.Stderr, "usage: encave publish <name> [--tag vX.Y.Z] [--message msg] [--remote url] [--no-tag]")
+		fmt.Fprintln(os.Stderr, "usage: encave publish <name> [--tag vX.Y.Z] [--message msg] [--remote url] [--no-tag] [--no-push] [-y]")
 		fs.PrintDefaults()
 	}
 	name, ok := parseOnePositional(fs, args)
@@ -136,18 +139,100 @@ func cmdPublish(args []string) int {
 	}
 
 	fmt.Println()
-	fmt.Println("Publish prepared locally. To share, push the branch and tag:")
-	if gitutil.RemoteExists(dir, "origin") {
+	return finishPublish(dir, *tag, *noPush, *yes)
+}
+
+// finishPublish handles the post-commit/tag step: when an origin remote is
+// configured, it offers (or, with --yes, performs) the push; when none is
+// configured, it stops and explains how to set one. The commit and tag already
+// exist regardless, so this never undoes work — it only decides about pushing.
+func finishPublish(dir, tag string, noPush, yes bool) int {
+	if !gitutil.RemoteExists(dir, "origin") {
+		errf("no git remote configured, so nothing was pushed.")
+		fmt.Fprintln(os.Stderr, "Set a remote, then re-run publish (or push manually):")
+		fmt.Fprintf(os.Stderr, "  encave publish ... --remote <github-url>\n")
+		fmt.Fprintf(os.Stderr, "  or:  git -C %s remote add origin <github-url>\n", dir)
+		fmt.Fprintln(os.Stderr, "(The commit and tag were created locally and are ready to push.)")
+		return 1
+	}
+
+	url, _ := gitutil.RemoteURL(dir, "origin")
+
+	switch pushPlan(noPush, yes, isInteractive()) {
+	case pushSkip:
+		fmt.Println("Skipping push. To push manually:")
 		fmt.Printf("  git -C %s push -u origin HEAD", dir)
-		if *tag != "" {
-			fmt.Printf(" && git -C %s push origin %s", dir, *tag)
+		if tag != "" {
+			fmt.Printf(" && git -C %s push origin %s", dir, tag)
 		}
 		fmt.Println()
+		return 0
+
+	case pushConfirm:
+		prompt := fmt.Sprintf("Push to %s now?", url)
+		if !confirm(prompt) {
+			fmt.Println("Not pushed. To push later:")
+			fmt.Printf("  git -C %s push -u origin HEAD", dir)
+			if tag != "" {
+				fmt.Printf(" && git -C %s push origin %s", dir, tag)
+			}
+			fmt.Println()
+			return 0
+		}
+	case pushAuto:
+		// proceed without prompting
+	}
+
+	return doPush(dir, tag, url)
+}
+
+// doPush pushes the current branch (and the tag, if any) to origin.
+func doPush(dir, tag, url string) int {
+	branch := gitutil.CurrentBranch(dir)
+	if branch == "" {
+		errf("cannot push: HEAD is detached (no current branch)")
+		return 1
+	}
+	fmt.Printf("Pushing %s to %s ...\n", branch, url)
+	if err := gitutil.Push(dir, "-u", "origin", "HEAD"); err != nil {
+		errf("pushing branch: %v", err)
+		return 1
+	}
+	if tag != "" {
+		if err := gitutil.Push(dir, "origin", tag); err != nil {
+			errf("pushing tag %s: %v", tag, err)
+			return 1
+		}
+		fmt.Printf("Pushed branch %s and tag %s.\n", branch, tag)
 	} else {
-		fmt.Printf("  git -C %s remote add origin <github-url>\n", dir)
-		fmt.Printf("  git -C %s push -u origin HEAD\n", dir)
+		fmt.Printf("Pushed branch %s.\n", branch)
 	}
 	return 0
+}
+
+// pushMode is the resolved decision about whether/how to push.
+type pushMode int
+
+const (
+	pushSkip    pushMode = iota // do not push (print manual instructions)
+	pushConfirm                 // ask the user interactively
+	pushAuto                    // push without prompting
+)
+
+// pushPlan decides how to handle pushing when a remote exists. Precedence:
+// --no-push wins; then --yes; then, if interactive, prompt; otherwise (a
+// non-interactive session without --yes) skip for safety.
+func pushPlan(noPush, yes, interactive bool) pushMode {
+	switch {
+	case noPush:
+		return pushSkip
+	case yes:
+		return pushAuto
+	case interactive:
+		return pushConfirm
+	default:
+		return pushSkip
+	}
 }
 
 // scanStaged scans the on-disk content of staged files for secrets.

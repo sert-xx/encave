@@ -94,7 +94,7 @@ USAGE:
 
 COMMANDS:
   new <name>              Scaffold a draft agent from your base home (secrets filtered)
-  publish <name>          Scan (fail-closed), commit, and tag a draft for sharing
+  publish <name>          Scan (fail-closed), commit, tag, and (with a remote) push a draft
   install <github-url>    Clone an agent and check out a tag into <root>/<owner>/<repo>
   run <owner>/<repo>      Launch an agent in its isolated home with injected auth
   auth set|status|clear   Manage credentials in the OS keyring (values never printed)
