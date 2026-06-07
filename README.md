@@ -60,7 +60,7 @@ Windows uses the Credential Manager out of the box.
 
 ```
 encave new <name>              Scaffold a draft agent from your base home (secrets filtered)
-encave publish <name>          Scan (fail-closed), commit, and tag a draft for sharing
+encave publish <name>          Scan (fail-closed), commit, tag, and (with a remote) push a draft
 encave install <github-url>    Clone an agent and check out a tag into <root>/<owner>/<repo>
 encave run <owner>/<repo>      Launch an agent in its isolated home with injected auth
 encave auth set|status|clear   Manage credentials in the OS keyring (values never printed)
@@ -77,11 +77,23 @@ target CLI.
 ```sh
 encave new review-agent                 # copy ~/.codex into a draft, filtering secrets/state
 # ... tune agents/, skills/, config.toml ...
-encave publish review-agent --tag v1.0.0
-# fail-closed secret scan -> commit -> tag. Then push to GitHub:
-git -C ~/.encave/_drafts/review-agent remote add origin git@github.com:dai/review-agent.git
-git -C ~/.encave/_drafts/review-agent push -u origin HEAD && git ... push origin v1.0.0
+
+# Create the empty repo on GitHub first, then publish with a remote:
+encave publish review-agent --tag v1.0.0 --remote git@github.com:dai/review-agent.git
+# fail-closed secret scan -> commit -> tag -> prompt to push to origin.
 ```
+
+`encave publish` runs the secret scan, commits, and tags. Then, for pushing:
+
+- **A remote is configured** (via `--remote`, or an existing `origin`): it asks
+  `Push to <url> now? [y/N]` and pushes the branch and tag on confirmation.
+  Use `-y`/`--yes` to skip the prompt (automation), or `--no-push` to stop after
+  tagging.
+- **No remote is configured**: it stops without pushing and tells you to set one
+  (the commit and tag are already created locally and ready to push).
+
+In non-interactive contexts (no TTY), publish never pushes unless `--yes` is
+given.
 
 ### Consumer side (a teammate)
 

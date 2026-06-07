@@ -172,6 +172,27 @@ func AddRemote(dir, name, url string) error {
 	return err
 }
 
+// RemoteURL returns the URL configured for a named remote.
+func RemoteURL(dir, name string) (string, error) {
+	return Run(dir, "remote", "get-url", name)
+}
+
+// Push runs `git push` in dir with the given arguments.
+func Push(dir string, args ...string) error {
+	_, err := Run(dir, append([]string{"push"}, args...)...)
+	return err
+}
+
+// CurrentBranch returns the name of the currently checked-out branch, or "" if
+// HEAD is detached.
+func CurrentBranch(dir string) string {
+	out, err := Run(dir, "symbolic-ref", "--quiet", "--short", "HEAD")
+	if err != nil {
+		return ""
+	}
+	return out
+}
+
 // parseSemver parses "vX.Y.Z" into [3]int, returning nil if it doesn't match.
 func parseSemver(t string) []int {
 	if !strings.HasPrefix(t, "v") {
