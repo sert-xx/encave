@@ -189,10 +189,11 @@ encave dai/review-agent            # try it locally before publishing
 # ... tune agents/, skills/, config.toml ...
 ```
 
-`encave new` also generates a `README.md` template in the agent (unless the
-copied home already has one, or you pass `--no-readme`): it documents the
-install/auth/run flow for consumers, filled in with the agent's `<owner>/<repo>`
-and the credential env var(s) discovered from its config.
+`encave new` also generates a `README.md` template in the agent (unless you pass
+`--no-readme`), replacing any README copied from your base home — that generic
+`~/.codex` README rarely fits a specific agent. It documents the install/auth/run
+flow for consumers, filled in with the agent's `<owner>/<repo>` and the credential
+env var(s) discovered from its config.
 
 ```sh
 # Create the empty repo on GitHub first, then publish with a remote:
