@@ -10,13 +10,33 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"runtime/debug"
 	"strings"
 
 	"github.com/sert-xx/encave/internal/paths"
 )
 
-// Version is the encave version, overridable at build time via -ldflags.
-var Version = "0.1.0-dev"
+// Version is the encave version. It is normally left empty and resolved from the
+// module's build info at runtime (so `go install github.com/sert-xx/encave@vX`
+// reports vX). A release build can still pin it explicitly via
+// -ldflags "-X github.com/sert-xx/encave/internal/cli.Version=vX.Y.Z".
+var Version = ""
+
+// version returns the best available version string: an explicit build-time
+// override if set, otherwise the module version recorded in the binary's build
+// info (e.g. "v0.1.0" or a pseudo-version), falling back to "(devel)" for local
+// builds within the module.
+func version() string {
+	if Version != "" {
+		return Version
+	}
+	if info, ok := debug.ReadBuildInfo(); ok {
+		if v := info.Main.Version; v != "" {
+			return v
+		}
+	}
+	return "(devel)"
+}
 
 // knownCommands lists the explicit subcommands. Anything else on the command
 // line is treated as the agent reference for an implicit `run`.
@@ -56,7 +76,7 @@ func Main(args []string) int {
 }
 
 func cmdVersion(_ []string) int {
-	fmt.Printf("encave %s\n", Version)
+	fmt.Printf("encave %s\n", version())
 	return 0
 }
 
