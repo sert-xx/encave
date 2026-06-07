@@ -122,16 +122,16 @@ func cmdNew(args []string) int {
 	return 0
 }
 
-// maybeWriteReadme writes a README.md template into the draft unless one already
-// exists (an existing README from the copied home is never clobbered). It
+// maybeWriteReadme writes the README.md template into the agent, always
+// overwriting any README copied from the base home (that generic ~/.codex README
+// rarely applies to a specific agent; copy it back manually if you want it). It
 // returns a short status string for the summary output. Failures are reported
 // but non-fatal — scaffolding succeeds regardless.
 func maybeWriteReadme(dst string, ref AgentRef, ad adapter.Adapter) string {
 	path := filepath.Join(dst, "README.md")
+	replaced := false
 	if _, err := os.Stat(path); err == nil {
-		return "skipped (README.md already present)"
-	} else if !os.IsNotExist(err) {
-		return fmt.Sprintf("skipped (%v)", err)
+		replaced = true
 	}
 
 	// Best-effort: surface the agent's auth env vars in the template.
@@ -140,6 +140,9 @@ func maybeWriteReadme(dst string, ref AgentRef, ad adapter.Adapter) string {
 	content := renderAgentReadme(ref.Owner, ref.Repo, ad.Name(), authVars)
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		return fmt.Sprintf("not written (%v)", err)
+	}
+	if replaced {
+		return "generated README.md (replaced the copied one; edit the TODOs)"
 	}
 	return "generated README.md (edit the TODOs)"
 }
