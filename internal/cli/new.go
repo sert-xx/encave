@@ -9,6 +9,7 @@ import (
 	"github.com/sert-xx/encave/internal/adapter"
 	"github.com/sert-xx/encave/internal/agentmeta"
 	"github.com/sert-xx/encave/internal/fsutil"
+	"github.com/sert-xx/encave/internal/gitutil"
 	"github.com/sert-xx/encave/internal/paths"
 	"github.com/sert-xx/encave/internal/scan"
 )
@@ -97,6 +98,14 @@ func cmdNew(args []string) int {
 		readmeStatus = maybeWriteReadme(dst, ref, ad)
 	}
 
+	// Initialize a git repo and make an initial commit containing only the
+	// README. The rest of the agent is committed later by `publish`, after the
+	// fail-closed secret scan — so nothing unscanned lands in a commit here.
+	gitStatus := ""
+	if fileExists(filepath.Join(dst, "README.md")) {
+		gitStatus = gitInitCommitReadme(dst)
+	}
+
 	fmt.Printf("Created agent %s at %s\n", ref, dst)
 	fmt.Printf("  target:   %s\n", ad.Name())
 	fmt.Printf("  source:   %s\n", src)
@@ -105,6 +114,9 @@ func cmdNew(args []string) int {
 		fmt.Printf("  excluded: %d entries (secrets/state/logs filtered)\n", len(res.Excluded))
 	}
 	fmt.Printf("  README:   %s\n", readmeStatus)
+	if gitStatus != "" {
+		fmt.Printf("  git:      %s\n", gitStatus)
+	}
 
 	// Best-effort early warning: run the same scanner publish will use, but only
 	// to inform — `new` never blocks.
@@ -145,6 +157,31 @@ func maybeWriteReadme(dst string, ref AgentRef, ad adapter.Adapter) string {
 		return "generated README.md (replaced the copied one; edit the TODOs)"
 	}
 	return "generated README.md (edit the TODOs)"
+}
+
+// fileExists reports whether path exists (as any kind of file).
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
+}
+
+// gitInitCommitReadme initializes a git repo in dir and makes an initial commit
+// containing only README.md. It is best-effort: if git is unavailable it skips,
+// and any git error is reported in the returned status without failing `new`.
+func gitInitCommitReadme(dir string) string {
+	if !gitutil.Available() {
+		return "skipped (git not found)"
+	}
+	if err := gitutil.Init(dir); err != nil {
+		return fmt.Sprintf("skipped (init failed: %v)", err)
+	}
+	if err := gitutil.AddPaths(dir, "README.md"); err != nil {
+		return fmt.Sprintf("init only (add failed: %v)", err)
+	}
+	if err := gitutil.Commit(dir, "Initial commit"); err != nil {
+		return fmt.Sprintf("init only (commit failed: %v)", err)
+	}
+	return "git init + initial commit (README.md)"
 }
 
 // scanDraft scans every regular file in a draft directory and returns findings.

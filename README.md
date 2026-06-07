@@ -195,6 +195,10 @@ encave dai/review-agent            # try it locally before publishing
 flow for consumers, filled in with the agent's `<owner>/<repo>` and the credential
 env var(s) discovered from its config.
 
+`new` then runs `git init` and makes an initial commit containing **only** the
+README (skipped if git isn't installed). The rest of the agent is committed later
+by `publish`, after the secret scan — so nothing unscanned lands in a commit.
+
 ```sh
 # Create the empty repo on GitHub first, then publish with a remote:
 encave publish dai/review-agent --tag v1.0.0 --remote git@github.com:dai/review-agent.git
