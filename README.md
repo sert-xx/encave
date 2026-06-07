@@ -63,7 +63,7 @@ Windows uses the Credential Manager out of the box.
 encave new <name>              Scaffold a draft agent from your base home (secrets filtered)
 encave publish <name>          Scan (fail-closed), commit, tag, and (with a remote) push a draft
 encave install <github-url>    Clone an agent and check out a tag into <root>/<owner>/<repo>
-encave run <owner>/<repo>      Launch an agent in its isolated home with injected auth
+encave run [<owner>/<repo>]    Launch an agent (omit the ref to pick interactively)
 encave auth set|status|clear   Manage credentials in the OS keyring (values never printed)
 encave list                    List installed agents and local drafts
 encave version | help
@@ -102,6 +102,18 @@ given.
 encave auth set --global                          # store the proxy PAT in the keyring (once; refresh on expiry)
 encave install github.com/dai/review-agent --tag v1.0.0
 encave dai/review-agent                            # launch with isolated home + injected auth
+```
+
+Run `encave list` to see installed agents (and local drafts). With no agent
+reference, `encave run` lists the installed agents and lets you pick one
+interactively:
+
+```sh
+encave run
+# Installed agents:
+#    1) bob/test-agent     [codex] v1.0.0
+#    2) dai/review-agent   [codex] v1.0.0
+# Select an agent [1-2] (q to cancel): 2
 ```
 
 Inspect exactly what would run, with credentials redacted, without launching:
