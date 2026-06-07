@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/sert-xx/encave/internal/adapter"
 	"github.com/sert-xx/encave/internal/agentmeta"
 	"github.com/sert-xx/encave/internal/gitutil"
 	"github.com/sert-xx/encave/internal/paths"
@@ -118,54 +119,66 @@ func findDrafts(root string) []draftAgent {
 	return out
 }
 
-// pickInstalledAgent prints the installed agents and lets the user choose one
-// interactively (used by `encave run` when no agent reference is given). It
-// returns the chosen reference, or ok=false when selection is not possible
-// (no agents installed, no terminal to prompt on, or the user cancels).
-func pickInstalledAgent(root string) (AgentRef, bool) {
+// runSelection is the outcome of the interactive launch picker: either an
+// installed agent reference, or the user's native default home.
+type runSelection struct {
+	native bool
+	ref    AgentRef
+}
+
+// pickLaunchTarget lets the user choose interactively what `encave run` should
+// launch: one of the installed agents, or their own default home (no isolation,
+// no credential injection). The native-home choice is always offered — even with
+// no agents installed — so encave can be the single entry point. It returns
+// ok=false when there is no terminal to prompt on, or the user cancels.
+func pickLaunchTarget(root string) (runSelection, bool) {
 	agents := findInstalled(root)
-	if len(agents) == 0 {
-		errf("no agents are installed in %s", root)
-		fmt.Fprintln(os.Stderr, "  install one first:  encave install github.com/<owner>/<repo>")
-		return AgentRef{}, false
-	}
+
 	if !isInteractive() {
 		errf("no agent specified and no terminal available to choose interactively")
-		fmt.Fprintln(os.Stderr, "  specify one:   encave run <owner>/<repo>")
-		fmt.Fprintln(os.Stderr, "  or list them:  encave list")
-		return AgentRef{}, false
+		fmt.Fprintln(os.Stderr, "  an installed agent:  encave run <owner>/<repo>")
+		fmt.Fprintf(os.Stderr, "  your default home:   encave run %s\n", nativeRef)
+		fmt.Fprintln(os.Stderr, "  or list agents:      encave list")
+		return runSelection{}, false
 	}
 
-	fmt.Println("Installed agents:")
+	fmt.Println("Choose what to launch:")
 	for i, a := range agents {
 		fmt.Printf("  %2d) %-30s [%s] %s\n", i+1, a.ref, a.target, a.ref2)
 	}
+	// The native default home is always the last entry.
+	nativeLabel := fmt.Sprintf("your default %s home", adapter.DefaultName)
+	fmt.Printf("  %2d) %-30s (your own setup; no isolation/injection)\n", len(agents)+1, nativeLabel)
 
+	total := len(agents) + 1
 	reader := bufio.NewReader(os.Stdin)
 	for attempts := 0; attempts < 3; attempts++ {
-		fmt.Printf("Select an agent [1-%d] (q to cancel): ", len(agents))
+		fmt.Printf("Select [1-%d] (q to cancel): ", total)
 		line, err := reader.ReadString('\n')
 		if err != nil && line == "" {
 			fmt.Println()
-			return AgentRef{}, false
+			return runSelection{}, false
 		}
-		idx, cancel, cerr := parseAgentChoice(line, len(agents))
+		idx, cancel, cerr := parseAgentChoice(line, total)
 		if cancel {
-			return AgentRef{}, false
+			return runSelection{}, false
 		}
 		if cerr != nil {
 			fmt.Fprintf(os.Stderr, "  %v\n", cerr)
 			continue
 		}
+		if idx == len(agents) { // the native-home entry
+			return runSelection{native: true}, true
+		}
 		ref, perr := parseAgentRef(agents[idx].ref)
 		if perr != nil {
 			errf("%v", perr)
-			return AgentRef{}, false
+			return runSelection{}, false
 		}
-		return ref, true
+		return runSelection{ref: ref}, true
 	}
 	errf("no valid selection made")
-	return AgentRef{}, false
+	return runSelection{}, false
 }
 
 // parseAgentChoice interprets one line of picker input against a list of size n.

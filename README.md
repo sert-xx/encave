@@ -109,7 +109,7 @@ Your personal `~/.codex` is never touched.
 encave new <name>              Scaffold a draft agent (secrets filtered; README template generated)
 encave publish <name>          Scan (fail-closed), commit, tag, and (with a remote) push a draft
 encave install <github-url>    Clone an agent and check out a tag into <root>/<owner>/<repo>
-encave run [<owner>/<repo>]    Launch an agent (omit the ref to pick interactively)
+encave run [<owner>/<repo>]    Launch an agent ("default" = your own home; omit to pick)
 encave auth set|status|clear   Manage credentials in the OS keyring (values never printed)
 encave list                    List installed agents and local drafts
 encave version | help
@@ -143,8 +143,22 @@ command (credentials redacted) without launching:
 encave dai/review-agent --dry-run -- exec "review this diff"
 ```
 
-Manage credentials in the OS keyring. They are resolved agent-specific entry
-first, then the global one, and injected only into the launched process:
+### Launching your own (non-encave) home
+
+So encave can be your single entry point, `default` launches your own default
+home for the target (e.g. `~/.codex`) directly — no isolation, no credential
+injection, `CODEX_HOME` left untouched. It behaves exactly like running the
+target CLI yourself, and also appears as a choice in `encave run`'s picker:
+
+```sh
+encave default                     # same as `encave run default`
+encave run default -- exec "quick one-off in my own setup"
+```
+
+### Managing credentials
+
+Credentials live in the OS keyring, resolved agent-specific entry first, then the
+global one, and injected only into the launched (isolated) process:
 
 ```sh
 encave auth set --agent dai/review-agent   # scope to one agent
