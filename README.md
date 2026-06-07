@@ -42,20 +42,66 @@ There is deliberately **no command that prints a stored credential**: that would
 be a standing credential-dump oracle. Credentials only ever leave the keyring as
 environment for one launched child process, for that process's lifetime.
 
-## Install / build
+## Installation
 
-Requires Go 1.25.11+ (1.25.10+ includes standard-library security fixes that
-encave's code paths depend on).
+### Prerequisites
+
+- **Go 1.25.11+** — 1.25.10+ ships standard-library security fixes encave's code
+  paths rely on. With `GOTOOLCHAIN=auto` (the Go default), `go install` fetches a
+  suitable toolchain automatically.
+- **git** on your `PATH` (used by `install` and `publish`).
+- The **target agent CLI** you want to run — currently the **Codex CLI**.
+- A working **OS keyring**: macOS Keychain and Windows Credential Manager work
+  out of the box; on **Linux** you need a running **Secret Service** such as
+  `gnome-keyring` or KeePassXC's Secret Service.
+
+### Install with `go install` (recommended)
 
 ```sh
-make build      # produces ./encave
-make test       # run the test suite
-make install    # go install into $GOBIN
+# latest release
+go install github.com/sert-xx/encave@latest
+
+# …or pin a specific version
+go install github.com/sert-xx/encave@v0.4.0
 ```
 
-On **Linux**, the keyring needs a running **Secret Service** (e.g.
-`gnome-keyring` or KeePassXC's Secret Service). macOS uses the Keychain and
-Windows uses the Credential Manager out of the box.
+`go install` places the `encave` binary in `$(go env GOBIN)`, falling back to
+`$(go env GOPATH)/bin`. Make sure that directory is on your `PATH`:
+
+```sh
+export PATH="$(go env GOPATH)/bin:$PATH"   # add this to your shell profile
+```
+
+### Build from source
+
+```sh
+git clone https://github.com/sert-xx/encave && cd encave
+make build      # produces ./encave
+make install    # go install into $GOBIN
+make test       # run the test suite
+```
+
+### Verify
+
+```sh
+encave version
+```
+
+## Quick start (using a shared agent)
+
+```sh
+# 1. Store your credential once (e.g. a proxy PAT). Re-run when it expires.
+encave auth set --global
+
+# 2. Install an agent, pinned to a released version.
+encave install github.com/dai/review-agent --tag v1.0.0
+
+# 3. Launch it — in its own isolated home, credential injected at launch.
+encave dai/review-agent
+#    (or run `encave run` and pick from the list)
+```
+
+Your personal `~/.codex` is never touched.
 
 ## Commands
 
@@ -73,62 +119,65 @@ encave version | help
 `encave run dai/review-agent`. Anything after `--` is forwarded verbatim to the
 target CLI.
 
-### Provider side (the person with the tuned setup)
+## Usage
+
+### Using a shared agent
+
+See what's installed (and any local drafts):
 
 ```sh
-encave new review-agent                 # copy ~/.codex into a draft, filtering secrets/state
-# ... tune agents/, skills/, config.toml ...
+encave list
 ```
 
-`encave new` also generates a `README.md` template in the draft (unless the
-copied home already has one, or you pass `--no-readme`). It documents the encave
-install/auth/run flow for consumers — and auto-fills the credential env var(s)
-discovered from the agent's config — with `TODO`s for you to describe what the
-agent does.
+Launch by reference, or omit it to pick interactively from a numbered list:
 
 ```sh
-# Create the empty repo on GitHub first, then publish with a remote:
-encave publish review-agent --tag v1.0.0 --remote git@github.com:dai/review-agent.git
-# fail-closed secret scan -> commit -> tag -> prompt to push to origin.
+encave dai/review-agent            # run is the default command
+encave run                         # choose from the installed agents
 ```
 
-`encave publish` runs the secret scan, commits, and tags. Then, for pushing:
-
-- **A remote is configured** (via `--remote`, or an existing `origin`): it asks
-  `Push to <url> now? [y/N]` and pushes the branch and tag on confirmation.
-  Use `-y`/`--yes` to skip the prompt (automation), or `--no-push` to stop after
-  tagging.
-- **No remote is configured**: it stops without pushing and tells you to set one
-  (the commit and tag are already created locally and ready to push).
-
-In non-interactive contexts (no TTY), publish never pushes unless `--yes` is
-given.
-
-### Consumer side (a teammate)
-
-```sh
-encave auth set --global                          # store the proxy PAT in the keyring (once; refresh on expiry)
-encave install github.com/dai/review-agent --tag v1.0.0
-encave dai/review-agent                            # launch with isolated home + injected auth
-```
-
-Run `encave list` to see installed agents (and local drafts). With no agent
-reference, `encave run` lists the installed agents and lets you pick one
-interactively:
-
-```sh
-encave run
-# Installed agents:
-#    1) bob/test-agent     [codex] v1.0.0
-#    2) dai/review-agent   [codex] v1.0.0
-# Select an agent [1-2] (q to cancel): 2
-```
-
-Inspect exactly what would run, with credentials redacted, without launching:
+Anything after `--` is forwarded verbatim to the target CLI. Preview the exact
+command (credentials redacted) without launching:
 
 ```sh
 encave dai/review-agent --dry-run -- exec "review this diff"
 ```
+
+Manage credentials in the OS keyring. They are resolved agent-specific entry
+first, then the global one, and injected only into the launched process:
+
+```sh
+encave auth set --agent dai/review-agent   # scope to one agent
+encave auth set --global                   # or share across agents
+encave auth status --global                # shows "set" / "not set" only — never the value
+encave auth clear --global
+```
+
+### Creating and sharing an agent
+
+```sh
+encave new review-agent            # copy ~/.codex into a draft, filtering secrets/state
+# ... tune agents/, skills/, config.toml ...
+```
+
+`encave new` also generates a `README.md` template in the draft (unless the
+copied home already has one, or you pass `--no-readme`): it documents the
+install/auth/run flow for consumers and auto-fills the credential env var(s)
+discovered from the agent's config, with `TODO`s for you to fill in.
+
+```sh
+# Create the empty repo on GitHub first, then publish with a remote:
+encave publish review-agent --tag v1.0.0 --remote git@github.com:dai/review-agent.git
+```
+
+`encave publish` runs a fail-closed secret scan, commits, and tags. Then:
+
+- **With a remote** (`--remote`, or an existing `origin`): it asks
+  `Push to <url> now? [y/N]` and pushes the branch and tag on confirmation.
+  `-y`/`--yes` skips the prompt; `--no-push` stops after tagging. Non-interactive
+  runs never push unless `--yes` is given.
+- **Without a remote**: it stops without pushing and explains how to set one
+  (the commit and tag are already created locally).
 
 ## Security model
 
