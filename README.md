@@ -60,7 +60,7 @@ Windows uses the Credential Manager out of the box.
 ## Commands
 
 ```
-encave new <name>              Scaffold a draft agent from your base home (secrets filtered)
+encave new <name>              Scaffold a draft agent (secrets filtered; README template generated)
 encave publish <name>          Scan (fail-closed), commit, tag, and (with a remote) push a draft
 encave install <github-url>    Clone an agent and check out a tag into <root>/<owner>/<repo>
 encave run [<owner>/<repo>]    Launch an agent (omit the ref to pick interactively)
@@ -78,7 +78,15 @@ target CLI.
 ```sh
 encave new review-agent                 # copy ~/.codex into a draft, filtering secrets/state
 # ... tune agents/, skills/, config.toml ...
+```
 
+`encave new` also generates a `README.md` template in the draft (unless the
+copied home already has one, or you pass `--no-readme`). It documents the encave
+install/auth/run flow for consumers — and auto-fills the credential env var(s)
+discovered from the agent's config — with `TODO`s for you to describe what the
+agent does.
+
+```sh
 # Create the empty repo on GitHub first, then publish with a remote:
 encave publish review-agent --tag v1.0.0 --remote git@github.com:dai/review-agent.git
 # fail-closed secret scan -> commit -> tag -> prompt to push to origin.
