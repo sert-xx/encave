@@ -93,8 +93,8 @@ USAGE:
   encave <owner>/<repo> [-- <agent-args...>]    # implicit "run"
 
 COMMANDS:
-  new <name>              Scaffold a draft agent (secrets filtered, README template generated)
-  publish <name>          Scan (fail-closed), commit, tag, and (with a remote) push a draft
+  new <owner>/<repo>      Scaffold a draft agent (secrets filtered, README template generated)
+  publish <owner>/<repo>  Scan (fail-closed), commit, tag, and (with a remote) push a draft
   install <github-url>    Clone an agent and check out a tag into <root>/<owner>/<repo>
   run [<owner>/<repo>]    Launch an agent ("default" = your own home; no ref = pick)
   auth set|status|clear   Manage credentials in the OS keyring (values never printed)

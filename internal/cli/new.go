@@ -23,15 +23,17 @@ func cmdNew(args []string) int {
 	force := fs.Bool("force", false, "overwrite an existing draft of the same name")
 	noReadme := fs.Bool("no-readme", false, "do not generate a README.md template")
 	fs.Usage = func() {
-		fmt.Fprintln(os.Stderr, "usage: encave new <name> [--target codex] [--from <dir>] [--force] [--no-readme]")
+		fmt.Fprintln(os.Stderr, "usage: encave new <owner>/<repo> [--target codex] [--from <dir>] [--force] [--no-readme]")
 		fs.PrintDefaults()
 	}
-	name, ok := parseOnePositional(fs, args)
+	pos, ok := parseOnePositional(fs, args)
 	if !ok {
 		return 2
 	}
-	if name == "" || filepath.Base(name) != name {
-		errf("invalid draft name %q", name)
+	ref, err := parseAgentRef(pos)
+	if err != nil {
+		errf("%v", err)
+		fmt.Fprintln(os.Stderr, "  the agent name is its GitHub identity, e.g.  encave new dai/review-agent")
 		return 2
 	}
 
@@ -59,10 +61,10 @@ func cmdNew(args []string) int {
 		return 1
 	}
 
-	dst := paths.DraftDir(root, name)
+	dst := paths.DraftDir(root, ref.Owner, ref.Repo)
 	if _, err := os.Stat(dst); err == nil {
 		if !*force {
-			errf("draft %q already exists at %s (use --force to overwrite)", name, dst)
+			errf("draft %s already exists at %s (use --force to overwrite)", ref, dst)
 			return 1
 		}
 		if err := os.RemoveAll(dst); err != nil {
@@ -70,7 +72,7 @@ func cmdNew(args []string) int {
 			return 1
 		}
 	}
-	if err := os.MkdirAll(paths.DraftsDir(root), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
 		errf("creating drafts dir: %v", err)
 		return 1
 	}
@@ -91,10 +93,10 @@ func cmdNew(args []string) int {
 	// unless the user opted out or the copied home already has a README.
 	readmeStatus := "skipped (--no-readme)"
 	if !*noReadme {
-		readmeStatus = maybeWriteReadme(dst, name, ad)
+		readmeStatus = maybeWriteReadme(dst, ref, ad)
 	}
 
-	fmt.Printf("Created draft %q at %s\n", name, dst)
+	fmt.Printf("Created draft %s at %s\n", ref, dst)
 	fmt.Printf("  target:   %s\n", ad.Name())
 	fmt.Printf("  source:   %s\n", src)
 	fmt.Printf("  copied:   %d files\n", res.FilesCopied)
@@ -114,7 +116,7 @@ func cmdNew(args []string) int {
 	fmt.Println()
 	fmt.Println("Next steps:")
 	fmt.Printf("  1. Edit the draft (agents/, skills/, config.toml) under %s\n", dst)
-	fmt.Printf("  2. Publish it:  encave publish %s --tag v1.0.0\n", name)
+	fmt.Printf("  2. Publish it:  encave publish %s --tag v1.0.0\n", ref)
 	return 0
 }
 
@@ -122,7 +124,7 @@ func cmdNew(args []string) int {
 // exists (an existing README from the copied home is never clobbered). It
 // returns a short status string for the summary output. Failures are reported
 // but non-fatal — scaffolding succeeds regardless.
-func maybeWriteReadme(dst, name string, ad adapter.Adapter) string {
+func maybeWriteReadme(dst string, ref AgentRef, ad adapter.Adapter) string {
 	path := filepath.Join(dst, "README.md")
 	if _, err := os.Stat(path); err == nil {
 		return "skipped (README.md already present)"
@@ -133,7 +135,7 @@ func maybeWriteReadme(dst, name string, ad adapter.Adapter) string {
 	// Best-effort: surface the agent's auth env vars in the template.
 	authVars, _ := ad.AuthEnvVars(dst)
 
-	content := renderAgentReadme(name, ad.Name(), authVars)
+	content := renderAgentReadme(ref.Owner, ref.Repo, ad.Name(), authVars)
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		return fmt.Sprintf("not written (%v)", err)
 	}

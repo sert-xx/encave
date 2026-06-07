@@ -32,8 +32,11 @@ func Root() (string, error) {
 // DraftsDir is the working area for `encave new` (unpublished scaffolds).
 func DraftsDir(root string) string { return filepath.Join(root, "_drafts") }
 
-// DraftDir is the directory for a single draft agent.
-func DraftDir(root, name string) string { return filepath.Join(root, "_drafts", name) }
+// DraftDir is the directory for a single draft agent, mirroring the installed
+// layout so a draft's identity matches its eventual <owner>/<repo>.
+func DraftDir(root, owner, repo string) string {
+	return filepath.Join(root, "_drafts", owner, repo)
+}
 
 // AgentDir is where an installed agent lives: <root>/<owner>/<repo>.
 func AgentDir(root, owner, repo string) string { return filepath.Join(root, owner, repo) }

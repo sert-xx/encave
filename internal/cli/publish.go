@@ -29,11 +29,17 @@ func cmdPublish(args []string) int {
 	fs.BoolVar(yes, "y", false, "shorthand for --yes")
 	noPush := fs.Bool("no-push", false, "commit and tag only; never push")
 	fs.Usage = func() {
-		fmt.Fprintln(os.Stderr, "usage: encave publish <name> [--tag vX.Y.Z] [--message msg] [--remote url] [--no-tag] [--no-push] [-y]")
+		fmt.Fprintln(os.Stderr, "usage: encave publish <owner>/<repo> [--tag vX.Y.Z] [--message msg] [--remote url] [--no-tag] [--no-push] [-y]")
 		fs.PrintDefaults()
 	}
-	name, ok := parseOnePositional(fs, args)
+	pos, ok := parseOnePositional(fs, args)
 	if !ok {
+		return 2
+	}
+	ref, err := parseAgentRef(pos)
+	if err != nil {
+		errf("%v", err)
+		fmt.Fprintln(os.Stderr, "  drafts are identified by their GitHub identity, e.g.  encave publish dai/review-agent")
 		return 2
 	}
 
@@ -50,9 +56,10 @@ func cmdPublish(args []string) int {
 	if !ok {
 		return 1
 	}
-	dir := paths.DraftDir(root, name)
+	dir := paths.DraftDir(root, ref.Owner, ref.Repo)
 	if info, err := os.Stat(dir); err != nil || !info.IsDir() {
-		errf("draft %q not found at %s", name, dir)
+		errf("draft %s not found at %s", ref, dir)
+		fmt.Fprintf(os.Stderr, "  create it first:  encave new %s\n", ref)
 		return 1
 	}
 
@@ -107,9 +114,9 @@ func cmdPublish(args []string) int {
 	commitMsg := *message
 	if commitMsg == "" {
 		if *tag != "" {
-			commitMsg = fmt.Sprintf("Publish %s %s", name, *tag)
+			commitMsg = fmt.Sprintf("Publish %s %s", ref, *tag)
 		} else {
-			commitMsg = fmt.Sprintf("Publish %s", name)
+			commitMsg = fmt.Sprintf("Publish %s", ref)
 		}
 	}
 	if err := gitutil.Commit(dir, commitMsg); err != nil {
@@ -139,19 +146,21 @@ func cmdPublish(args []string) int {
 	}
 
 	fmt.Println()
-	return finishPublish(dir, *tag, *noPush, *yes)
+	return finishPublish(dir, ref, *tag, *noPush, *yes)
 }
 
 // finishPublish handles the post-commit/tag step: when an origin remote is
 // configured, it offers (or, with --yes, performs) the push; when none is
-// configured, it stops and explains how to set one. The commit and tag already
-// exist regardless, so this never undoes work — it only decides about pushing.
-func finishPublish(dir, tag string, noPush, yes bool) int {
+// configured, it stops and explains how to set one — using the agent's GitHub
+// identity to suggest the exact remote URLs. The commit and tag already exist
+// regardless, so this never undoes work — it only decides about pushing.
+func finishPublish(dir string, ref AgentRef, tag string, noPush, yes bool) int {
 	if !gitutil.RemoteExists(dir, "origin") {
 		errf("no git remote configured, so nothing was pushed.")
-		fmt.Fprintln(os.Stderr, "Set a remote, then re-run publish (or push manually):")
-		fmt.Fprintf(os.Stderr, "  encave publish ... --remote <github-url>\n")
-		fmt.Fprintf(os.Stderr, "  or:  git -C %s remote add origin <github-url>\n", dir)
+		fmt.Fprintln(os.Stderr, "Set a remote, then re-run publish (or push manually). For example:")
+		fmt.Fprintf(os.Stderr, "  encave publish %s --tag <tag> --remote git@github.com:%s.git\n", ref, ref)
+		fmt.Fprintf(os.Stderr, "  (HTTPS: https://github.com/%s.git)\n", ref)
+		fmt.Fprintf(os.Stderr, "  or:  git -C %s remote add origin git@github.com:%s.git\n", dir, ref)
 		fmt.Fprintln(os.Stderr, "(The commit and tag were created locally and are ready to push.)")
 		return 1
 	}
