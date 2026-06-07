@@ -29,16 +29,8 @@ func Root() (string, error) {
 	return filepath.Join(home, ".encave"), nil
 }
 
-// DraftsDir is the working area for `encave new` (unpublished scaffolds).
-func DraftsDir(root string) string { return filepath.Join(root, "_drafts") }
-
-// DraftDir is the directory for a single draft agent, mirroring the installed
-// layout so a draft's identity matches its eventual <owner>/<repo>.
-func DraftDir(root, owner, repo string) string {
-	return filepath.Join(root, "_drafts", owner, repo)
-}
-
-// AgentDir is where an installed agent lives: <root>/<owner>/<repo>.
+// AgentDir is where an agent lives: <root>/<owner>/<repo>. Both `encave new`
+// (locally authored) and `encave install` (fetched) use this single location.
 func AgentDir(root, owner, repo string) string { return filepath.Join(root, owner, repo) }
 
 // ConfigFile is encave's own (non-secret) configuration file.

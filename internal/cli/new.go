@@ -13,7 +13,8 @@ import (
 	"github.com/sert-xx/encave/internal/scan"
 )
 
-// cmdNew scaffolds a new draft agent from the user's base home, applying the
+// cmdNew scaffolds a new agent from the user's base home into the shared agent
+// location (<root>/<owner>/<repo>, the same place `install` uses), applying the
 // adapter's best-effort exclusion list (design doc §4.1). The static filter is
 // only initial cleaning; the real gate is the publish-time scan.
 func cmdNew(args []string) int {
@@ -61,19 +62,19 @@ func cmdNew(args []string) int {
 		return 1
 	}
 
-	dst := paths.DraftDir(root, ref.Owner, ref.Repo)
+	dst := paths.AgentDir(root, ref.Owner, ref.Repo)
 	if _, err := os.Stat(dst); err == nil {
 		if !*force {
-			errf("draft %s already exists at %s (use --force to overwrite)", ref, dst)
+			errf("agent %s already exists at %s (use --force to overwrite)", ref, dst)
 			return 1
 		}
 		if err := os.RemoveAll(dst); err != nil {
-			errf("removing existing draft: %v", err)
+			errf("removing existing agent: %v", err)
 			return 1
 		}
 	}
 	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
-		errf("creating drafts dir: %v", err)
+		errf("creating agent directory: %v", err)
 		return 1
 	}
 
@@ -96,7 +97,7 @@ func cmdNew(args []string) int {
 		readmeStatus = maybeWriteReadme(dst, ref, ad)
 	}
 
-	fmt.Printf("Created draft %s at %s\n", ref, dst)
+	fmt.Printf("Created agent %s at %s\n", ref, dst)
 	fmt.Printf("  target:   %s\n", ad.Name())
 	fmt.Printf("  source:   %s\n", src)
 	fmt.Printf("  copied:   %d files\n", res.FilesCopied)
@@ -115,8 +116,9 @@ func cmdNew(args []string) int {
 
 	fmt.Println()
 	fmt.Println("Next steps:")
-	fmt.Printf("  1. Edit the draft (agents/, skills/, config.toml) under %s\n", dst)
-	fmt.Printf("  2. Publish it:  encave publish %s --tag v1.0.0\n", ref)
+	fmt.Printf("  1. Edit the agent (agents/, skills/, config.toml) under %s\n", dst)
+	fmt.Printf("  2. Try it locally:  encave %s\n", ref)
+	fmt.Printf("  3. Publish it:      encave publish %s --tag v1.0.0\n", ref)
 	return 0
 }
 

@@ -13,11 +13,10 @@ import (
 	"github.com/sert-xx/encave/internal/adapter"
 	"github.com/sert-xx/encave/internal/agentmeta"
 	"github.com/sert-xx/encave/internal/gitutil"
-	"github.com/sert-xx/encave/internal/paths"
 )
 
-// cmdList shows installed agents (and local drafts), with the ref encave knows
-// them by. It's a convenience for discovering what is launchable.
+// cmdList shows the agents encave knows about (locally authored via `new` and
+// fetched via `install` share one location), with the ref each is known by.
 func cmdList(args []string) int {
 	fs := flag.NewFlagSet("list", flag.ContinueOnError)
 	fs.Usage = func() { fmt.Fprintln(os.Stderr, "usage: encave list") }
@@ -30,29 +29,17 @@ func cmdList(args []string) int {
 		return 1
 	}
 
-	installed := findInstalled(root)
-	drafts := findDrafts(root)
-
-	if len(installed) == 0 && len(drafts) == 0 {
-		fmt.Printf("No agents installed and no drafts under %s\n", root)
+	agents := findInstalled(root)
+	if len(agents) == 0 {
+		fmt.Printf("No agents under %s\n", root)
 		fmt.Println("Get started:  encave install github.com/<owner>/<repo>")
+		fmt.Println("        or:   encave new <owner>/<repo>")
 		return 0
 	}
 
-	if len(installed) > 0 {
-		fmt.Println("Installed agents:")
-		for _, a := range installed {
-			fmt.Printf("  %-30s [%s] %s\n", a.ref, a.target, a.ref2)
-		}
-	}
-	if len(drafts) > 0 {
-		if len(installed) > 0 {
-			fmt.Println()
-		}
-		fmt.Println("Drafts (unpublished):")
-		for _, d := range drafts {
-			fmt.Printf("  %-30s [%s]\n", d.name, d.target)
-		}
+	fmt.Println("Agents:")
+	for _, a := range agents {
+		fmt.Printf("  %-30s [%s] %s\n", a.ref, a.target, a.ref2)
 	}
 	return 0
 }
@@ -94,39 +81,6 @@ func findInstalled(root string) []installedAgent {
 		}
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].ref < out[j].ref })
-	return out
-}
-
-type draftAgent struct {
-	name   string
-	target string
-}
-
-func findDrafts(root string) []draftAgent {
-	var out []draftAgent
-	draftsRoot := paths.DraftsDir(root)
-	owners, err := os.ReadDir(draftsRoot)
-	if err != nil {
-		return out
-	}
-	for _, o := range owners {
-		if !o.IsDir() {
-			continue
-		}
-		ownerDir := filepath.Join(draftsRoot, o.Name())
-		repos, rerr := os.ReadDir(ownerDir)
-		if rerr != nil {
-			continue
-		}
-		for _, r := range repos {
-			if !r.IsDir() {
-				continue
-			}
-			dir := filepath.Join(ownerDir, r.Name())
-			out = append(out, draftAgent{name: o.Name() + "/" + r.Name(), target: agentmeta.DefaultTargetOr(dir)})
-		}
-	}
-	sort.Slice(out, func(i, j int) bool { return out[i].name < out[j].name })
 	return out
 }
 
