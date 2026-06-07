@@ -135,24 +135,48 @@ func (Codex) BuildLaunch(req LaunchRequest) (LaunchSpec, error) {
 	return LaunchSpec{Bin: "codex", Args: args}, nil
 }
 
+// What encave manages vs. ignores for a Codex home (verified against Codex docs
+// and the openai/codex issue tracker — see PR discussion):
+//
+//   - Managed (packaged): the author's tuned configuration — config.toml and
+//     <profile>.config.toml, AGENTS.md / AGENTS.override.md, prompts/, agents/
+//     (subagent definitions), skills/, and any other authored files.
+//   - Personal (symlinked, never packaged): rules/ (see codexPersonalSubdirs).
+//   - Ignored (machine-generated state/secrets): auth.json; history.jsonl;
+//     sessions/, archived_sessions/, session_index.jsonl, *.session.jsonl; the
+//     SQLite state/log databases (state_*.sqlite, logs_*.sqlite) and their
+//     WAL/SHM sidecars; log/ logs/ *.log; cache/ .cache/ tmp/; version.json.
+
 // ScaffoldExcludes implements Adapter. Best-effort removal of secrets, state,
-// logs, regenerable artifacts, and the user's personal subdirs when copying a
-// user's ~/.codex into a new agent.
+// history, databases, logs, caches, regenerable artifacts, and the user's
+// personal subdirs when copying a user's ~/.codex into a new agent.
 func (Codex) ScaffoldExcludes() []string {
 	out := []string{
-		"auth.json",       // OpenAI/login credentials
-		"history.jsonl",   // prompt history
-		"*.session.jsonl", // session transcripts
-		"sessions",        // session storage dir
-		"log",             // log dir/file
+		// Credentials
+		"auth.json",
+		// History, session transcripts and indices
+		"history.jsonl",
+		"*.session.jsonl",
+		"sessions",
+		"archived_sessions",
+		"session_index.jsonl",
+		// SQLite state/log DBs (e.g. state_5.sqlite, logs_2.sqlite) + WAL/SHM sidecars
+		"*.sqlite",
+		"*.sqlite-wal",
+		"*.sqlite-shm",
+		"*.db",
+		// Logs
+		"log",
 		"logs",
 		"*.log",
+		// Caches, temp, regenerable
 		"cache",
 		".cache",
 		"tmp",
 		".tmp",
-		"version.json", // regenerable metadata
-		".git",         // never copy a stray repo from the base home
+		"version.json",
+		// Never copy a stray repo from the base home
+		".git",
 	}
 	// Personal subdirs (e.g. rules) are linked at launch, never packaged.
 	return append(out, codexPersonalSubdirs...)
@@ -166,17 +190,24 @@ func (Codex) PersonalSubdirs() []string {
 // GitignoreLines implements Adapter.
 func (Codex) GitignoreLines() []string {
 	out := []string{
-		"# encave: never commit Codex credentials or local state",
+		"# encave: never commit Codex credentials, history, session state, or databases",
 		"auth.json",
 		"history.jsonl",
 		"*.session.jsonl",
 		"sessions/",
+		"archived_sessions/",
+		"session_index.jsonl",
+		"*.sqlite",
+		"*.sqlite-wal",
+		"*.sqlite-shm",
+		"*.db",
 		"logs/",
 		"log/",
 		"*.log",
 		"cache/",
 		".cache/",
 		"tmp/",
+		"version.json",
 		"# encave: personal settings — symlinked from your base home at launch",
 	}
 	for _, sub := range codexPersonalSubdirs {

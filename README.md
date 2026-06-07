@@ -236,10 +236,17 @@ encave publish dai/review-agent --tag v1.0.0 --remote git@github.com:dai/review-
     │                            #   (authored via `new` or fetched via `install`)
     ├── config.toml              # non-secret config (provider, env_key NAME, wire_api)
     ├── .encave.toml             # non-secret agent metadata (target adapter)
-    ├── agents/ skills/ ...       # orchestration + skills, vendored for self-containment
+    ├── agents/ prompts/ skills/ # orchestration, prompts, skills — vendored, committed
+    ├── AGENTS.md                # author instructions — committed
     ├── rules -> ~/.codex/rules  # personal settings: symlinked at launch, never packaged
-    └── (auth.json never present; .gitignored)
+    └── (ignored: auth.json, history.jsonl, sessions/, *.sqlite state/log DBs,
+         logs, caches, version.json — Codex's machine-generated state)
 ```
+
+Only the author's tuned configuration is packaged. Codex's machine-generated
+state — credentials, history, session transcripts, the `state_*.sqlite` /
+`logs_*.sqlite` databases (and their WAL/SHM sidecars), logs, caches and
+`version.json` — is excluded by `new` and gitignored by `publish`.
 
 Credentials live only in the OS keyring under the `encave` service.
 

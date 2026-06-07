@@ -111,6 +111,39 @@ func TestCodexPersonalSubdirsLinkedNotPackaged(t *testing.T) {
 	}
 }
 
+func TestCodexIgnoresGeneratedState(t *testing.T) {
+	c := Codex{}
+	contains := func(list []string, want string) bool {
+		for _, s := range list {
+			if s == want {
+				return true
+			}
+		}
+		return false
+	}
+
+	// Machine-generated state that must be both scaffold-excluded and gitignored.
+	excludeWant := []string{
+		"auth.json", "history.jsonl", "sessions", "archived_sessions",
+		"session_index.jsonl", "*.sqlite", "*.sqlite-wal", "*.sqlite-shm",
+		"*.db", "version.json",
+	}
+	for _, w := range excludeWant {
+		if !contains(c.ScaffoldExcludes(), w) {
+			t.Errorf("ScaffoldExcludes missing %q", w)
+		}
+	}
+	gitignoreWant := []string{
+		"auth.json", "sessions/", "archived_sessions/", "session_index.jsonl",
+		"*.sqlite", "*.sqlite-wal", "*.sqlite-shm", "*.db", "version.json",
+	}
+	for _, w := range gitignoreWant {
+		if !contains(c.GitignoreLines(), w) {
+			t.Errorf("GitignoreLines missing %q", w)
+		}
+	}
+}
+
 func TestRegistryHasCodex(t *testing.T) {
 	a, err := Get("codex")
 	if err != nil {
