@@ -170,15 +170,17 @@ encave auth clear --global
 ### Creating and sharing an agent
 
 An agent's name **is** its GitHub identity (`<owner>/<repo>`), so `new` and
-`publish` take it in that form and drafts live at `<root>/_drafts/<owner>/<repo>`,
-mirroring the installed layout.
+`publish` take it in that form. `new` scaffolds straight into
+`<root>/<owner>/<repo>` — the same place `install` uses — so there is no separate
+"drafts" area, and you can run and iterate on your own agent before publishing it.
 
 ```sh
-encave new dai/review-agent        # copy ~/.codex into a draft, filtering secrets/state
+encave new dai/review-agent        # copy ~/.codex into a new agent, filtering secrets/state
+encave dai/review-agent            # try it locally before publishing
 # ... tune agents/, skills/, config.toml ...
 ```
 
-`encave new` also generates a `README.md` template in the draft (unless the
+`encave new` also generates a `README.md` template in the agent (unless the
 copied home already has one, or you pass `--no-readme`): it documents the
 install/auth/run flow for consumers, filled in with the agent's `<owner>/<repo>`
 and the credential env var(s) discovered from its config.
@@ -216,8 +218,8 @@ encave publish dai/review-agent --tag v1.0.0 --remote git@github.com:dai/review-
 
 ```
 <root>/                          # ~/.encave (override with ENCAVE_ROOT)
-├── _drafts/<owner>/<repo>/      # `encave new` working area (unpublished)
-└── <owner>/<repo>/              # an installed agent = one isolated agent home
+└── <owner>/<repo>/              # one agent = one isolated agent home
+    │                            #   (authored via `new` or fetched via `install`)
     ├── config.toml              # non-secret config (provider, env_key NAME, wire_api)
     ├── .encave.toml             # non-secret agent metadata (target adapter)
     ├── agents/ skills/ ...       # orchestration + skills, vendored for self-containment

@@ -56,9 +56,9 @@ func cmdPublish(args []string) int {
 	if !ok {
 		return 1
 	}
-	dir := paths.DraftDir(root, ref.Owner, ref.Repo)
+	dir := paths.AgentDir(root, ref.Owner, ref.Repo)
 	if info, err := os.Stat(dir); err != nil || !info.IsDir() {
-		errf("draft %s not found at %s", ref, dir)
+		errf("agent %s not found at %s", ref, dir)
 		fmt.Fprintf(os.Stderr, "  create it first:  encave new %s\n", ref)
 		return 1
 	}
