@@ -101,14 +101,16 @@ encave dai/review-agent
 #    (or run `encave run` and pick from the list)
 ```
 
-Your personal `~/.codex` is never touched.
+Your personal `~/.codex` is never touched. `install` verifies the repo is an
+encave-managed agent (it has a valid `.encave.toml`, written by `encave new`) and
+refuses otherwise; pass `--no-verify` to override for a repo you trust.
 
 ## Commands
 
 ```
 encave new <owner>/<repo>      Scaffold a draft agent (secrets filtered; README template generated)
 encave publish <owner>/<repo>  Scan (fail-closed), commit, tag, and (with a remote) push a draft
-encave install <github-url>    Clone an agent and check out a tag into <root>/<owner>/<repo>
+encave install <github-url>    Clone+checkout an agent (verifies it's encave-managed)
 encave run [<owner>/<repo>]    Launch an agent ("default" = your own home; omit to pick)
 encave auth set|status|clear   Manage credentials in the OS keyring (values never printed)
 encave list                    List installed agents and local drafts
