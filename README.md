@@ -44,7 +44,8 @@ environment for one launched child process, for that process's lifetime.
 
 ## Install / build
 
-Requires Go 1.24+.
+Requires Go 1.25.11+ (1.25.10+ includes standard-library security fixes that
+encave's code paths depend on).
 
 ```sh
 make build      # produces ./encave
