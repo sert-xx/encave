@@ -84,6 +84,33 @@ func TestTomlStringEscaping(t *testing.T) {
 	}
 }
 
+func TestCodexPersonalSubdirsLinkedNotPackaged(t *testing.T) {
+	c := Codex{}
+	personal := c.PersonalSubdirs()
+	if len(personal) == 0 {
+		t.Fatal("expected at least one personal subdir (rules)")
+	}
+	has := func(list []string, want string) bool {
+		for _, s := range list {
+			if s == want {
+				return true
+			}
+		}
+		return false
+	}
+	for _, sub := range personal {
+		if !has(c.ScaffoldExcludes(), sub) {
+			t.Errorf("personal subdir %q must be excluded from scaffolding", sub)
+		}
+		if !has(c.GitignoreLines(), sub+"/") {
+			t.Errorf("personal subdir %q must be gitignored (%q)", sub, sub+"/")
+		}
+	}
+	if !has(personal, "rules") {
+		t.Errorf("expected 'rules' among personal subdirs, got %v", personal)
+	}
+}
+
 func TestRegistryHasCodex(t *testing.T) {
 	a, err := Get("codex")
 	if err != nil {

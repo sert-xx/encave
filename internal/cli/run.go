@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"sort"
 	"strings"
 
@@ -238,10 +239,16 @@ func launchAgent(root string, ref AgentRef, agentArgs []string, model, sandbox s
 		env[k] = v
 	}
 
+	// Personal subdirs (e.g. Codex "rules") are not packaged; link them from the
+	// user's base home so the user's own settings apply to this isolated agent.
+	links := personalLinkPlan(ad, agentDir)
+
 	if dryRun {
-		printDryRun(ref, ad, agentDir, spec, authVars, secretScope, env)
+		printDryRun(ref, ad, agentDir, spec, authVars, secretScope, env, links)
 		return 0
 	}
+
+	applyPersonalLinks(links)
 
 	binPath, err := exec.LookPath(spec.Bin)
 	if err != nil {
@@ -279,10 +286,13 @@ func mapToEnv(m map[string]string) []string {
 
 // printDryRun shows exactly what would run, with auth values redacted so the
 // command can be inspected safely.
-func printDryRun(ref AgentRef, ad adapter.Adapter, agentDir string, spec adapter.LaunchSpec, authVars []string, secretScope string, env map[string]string) {
+func printDryRun(ref AgentRef, ad adapter.Adapter, agentDir string, spec adapter.LaunchSpec, authVars []string, secretScope string, env map[string]string, links []personalLink) {
 	fmt.Printf("agent:    %s\n", ref)
 	fmt.Printf("target:   %s\n", ad.Name())
 	fmt.Printf("home:     %s=%s\n", ad.HomeEnvVar(), agentDir)
+	for _, l := range links {
+		fmt.Printf("link:     %s -> %s  (your personal settings)\n", l.dst, l.src)
+	}
 	if len(authVars) == 0 {
 		fmt.Println("auth:     (agent declares no env-based credential)")
 	} else {
@@ -312,6 +322,52 @@ func printDryRun(ref AgentRef, ad adapter.Adapter, agentDir string, spec adapter
 		// Only surface encave-relevant vars to keep output readable.
 		if k == ad.HomeEnvVar() || authSet[k] {
 			fmt.Printf("  %s=%s\n", k, v)
+		}
+	}
+}
+
+// personalLink is a planned symlink from a user's base-home personal subdir
+// (src) into the agent home (dst).
+type personalLink struct{ dst, src string }
+
+// personalLinkPlan computes which of the adapter's personal subdirs should be
+// symlinked into the agent home from the user's base home. It includes a subdir
+// only when it exists in the base home and the agent home does not already
+// contain a real (non-symlink) directory there — so committed data is never
+// clobbered.
+func personalLinkPlan(ad adapter.Adapter, agentDir string) []personalLink {
+	subdirs := ad.PersonalSubdirs()
+	if len(subdirs) == 0 {
+		return nil
+	}
+	base, err := ad.BaseHome()
+	if err != nil {
+		return nil
+	}
+	var out []personalLink
+	for _, sub := range subdirs {
+		src := filepath.Join(base, sub)
+		if fi, e := os.Stat(src); e != nil || !fi.IsDir() {
+			continue // user has no such personal dir; nothing to link
+		}
+		dst := filepath.Join(agentDir, sub)
+		if li, e := os.Lstat(dst); e == nil && li.Mode()&os.ModeSymlink == 0 {
+			continue // a real file/dir is present in the agent; respect it
+		}
+		out = append(out, personalLink{dst: dst, src: src})
+	}
+	return out
+}
+
+// applyPersonalLinks (re)creates the planned symlinks. Failures are warnings,
+// not fatal — the agent can still run without the personal subdir.
+func applyPersonalLinks(links []personalLink) {
+	for _, l := range links {
+		if li, e := os.Lstat(l.dst); e == nil && li.Mode()&os.ModeSymlink != 0 {
+			_ = os.Remove(l.dst) // refresh a stale/incorrect existing symlink
+		}
+		if err := os.Symlink(l.src, l.dst); err != nil {
+			fmt.Fprintf(os.Stderr, "encave: warning: could not link personal dir %s -> %s: %v\n", l.dst, l.src, err)
 		}
 	}
 }
