@@ -25,10 +25,12 @@ func (m *multiFlag) Set(v string) error { *m = append(*m, v); return nil }
 // injected from the keyring into the child process environment (design doc §4.4,
 // §5.2). It is also the implicit default command.
 //
-// Argument shape: the agent reference must come first; encave flags follow; and
-// everything after a literal `--` is forwarded verbatim to the target CLI.
+// Argument shape: an optional agent reference comes first; encave flags follow;
+// and everything after a literal `--` is forwarded verbatim to the target CLI.
+// When no agent reference is given, encave shows the installed agents and lets
+// the user pick one interactively.
 //
-//	encave run <owner>/<repo> [--model M] [--sandbox S] [-c k=v ...] [--dry-run] [-- <agent-args...>]
+//	encave run [<owner>/<repo>] [--model M] [--sandbox S] [-c k=v ...] [--dry-run] [-- <agent-args...>]
 func cmdRun(args []string) int {
 	// Split off the verbatim agent args after the first "--".
 	pre := args
@@ -41,18 +43,17 @@ func cmdRun(args []string) int {
 		}
 	}
 
-	if len(pre) == 0 {
-		errf("usage: encave run <owner>/<repo> [flags] [-- <agent-args...>]")
-		return 2
+	// The agent reference, when present, is the first token (before any flags).
+	// If it is absent (no tokens, or the first token is a flag), encave will
+	// offer an interactive picker over the installed agents.
+	var refArg string
+	var flagArgs []string
+	if len(pre) > 0 && !strings.HasPrefix(pre[0], "-") {
+		refArg = pre[0]
+		flagArgs = pre[1:]
+	} else {
+		flagArgs = pre
 	}
-
-	// The agent reference is the first token; the rest are flags.
-	refArg := pre[0]
-	if strings.HasPrefix(refArg, "-") {
-		errf("the agent reference (<owner>/<repo>) must come first, before flags")
-		return 2
-	}
-	flagArgs := pre[1:]
 
 	fs := flag.NewFlagSet("run", flag.ContinueOnError)
 	model := fs.String("model", "", "override the model at launch")
@@ -62,20 +63,15 @@ func cmdRun(args []string) int {
 	dryRun := fs.Bool("dry-run", false, "print the resolved command and environment (secrets redacted) without launching")
 	noAuth := fs.Bool("no-auth", false, "launch without injecting any credential")
 	fs.Usage = func() {
-		fmt.Fprintln(os.Stderr, "usage: encave run <owner>/<repo> [--model M] [--sandbox S] [-c k=v] [--dry-run] [-- <agent-args...>]")
+		fmt.Fprintln(os.Stderr, "usage: encave run [<owner>/<repo>] [--model M] [--sandbox S] [-c k=v] [--dry-run] [-- <agent-args...>]")
+		fmt.Fprintln(os.Stderr, "  With no <owner>/<repo>, choose interactively from the installed agents.")
 		fs.PrintDefaults()
 	}
 	if err := fs.Parse(flagArgs); err != nil {
 		return 2
 	}
 	if fs.NArg() > 0 {
-		errf("unexpected arguments %v (did you mean to put them after `--`?)", fs.Args())
-		return 2
-	}
-
-	ref, err := parseAgentRef(refArg)
-	if err != nil {
-		errf("%v", err)
+		errf("unexpected arguments %v (the agent reference must come first; pass target args after `--`)", fs.Args())
 		return 2
 	}
 
@@ -83,6 +79,30 @@ func cmdRun(args []string) int {
 	if !ok {
 		return 1
 	}
+
+	// Resolve the agent: an explicit reference, or an interactive selection.
+	var ref AgentRef
+	if refArg != "" {
+		r, err := parseAgentRef(refArg)
+		if err != nil {
+			errf("%v", err)
+			return 2
+		}
+		ref = r
+	} else {
+		r, ok := pickInstalledAgent(root)
+		if !ok {
+			return 1
+		}
+		ref = r
+	}
+
+	return launchAgent(root, ref, agentArgs, *model, *sandbox, overrides, *dryRun, *noAuth)
+}
+
+// launchAgent resolves the adapter and credentials for an installed agent and
+// either prints the resolved command (dry run) or execs the target CLI.
+func launchAgent(root string, ref AgentRef, agentArgs []string, model, sandbox string, overrides []string, dryRun, noAuth bool) int {
 	agentDir := paths.AgentDir(root, ref.Owner, ref.Repo)
 	if info, err := os.Stat(agentDir); err != nil || !info.IsDir() {
 		errf("agent %s is not installed (looked in %s)", ref, agentDir)
@@ -114,7 +134,7 @@ func cmdRun(args []string) int {
 
 	// Resolve the credential (agent-specific, then global) unless suppressed.
 	var secret, secretScope string
-	if !*noAuth && len(authVars) > 0 {
+	if !noAuth && len(authVars) > 0 {
 		secret, secretScope, err = secrets.Resolve(ref.Scope())
 		if err != nil {
 			if errors.Is(err, secrets.ErrNotFound) {
@@ -142,8 +162,8 @@ func cmdRun(args []string) int {
 	spec, err := ad.BuildLaunch(adapter.LaunchRequest{
 		AgentDir:  agentDir,
 		UserArgs:  agentArgs,
-		Model:     *model,
-		Sandbox:   *sandbox,
+		Model:     model,
+		Sandbox:   sandbox,
 		RawConfig: overrides,
 	})
 	if err != nil {
@@ -154,7 +174,7 @@ func cmdRun(args []string) int {
 		env[k] = v
 	}
 
-	if *dryRun {
+	if dryRun {
 		printDryRun(ref, ad, agentDir, spec, authVars, secretScope, env)
 		return 0
 	}
