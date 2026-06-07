@@ -106,8 +106,8 @@ Your personal `~/.codex` is never touched.
 ## Commands
 
 ```
-encave new <name>              Scaffold a draft agent (secrets filtered; README template generated)
-encave publish <name>          Scan (fail-closed), commit, tag, and (with a remote) push a draft
+encave new <owner>/<repo>      Scaffold a draft agent (secrets filtered; README template generated)
+encave publish <owner>/<repo>  Scan (fail-closed), commit, tag, and (with a remote) push a draft
 encave install <github-url>    Clone an agent and check out a tag into <root>/<owner>/<repo>
 encave run [<owner>/<repo>]    Launch an agent ("default" = your own home; omit to pick)
 encave auth set|status|clear   Manage credentials in the OS keyring (values never printed)
@@ -169,19 +169,23 @@ encave auth clear --global
 
 ### Creating and sharing an agent
 
+An agent's name **is** its GitHub identity (`<owner>/<repo>`), so `new` and
+`publish` take it in that form and drafts live at `<root>/_drafts/<owner>/<repo>`,
+mirroring the installed layout.
+
 ```sh
-encave new review-agent            # copy ~/.codex into a draft, filtering secrets/state
+encave new dai/review-agent        # copy ~/.codex into a draft, filtering secrets/state
 # ... tune agents/, skills/, config.toml ...
 ```
 
 `encave new` also generates a `README.md` template in the draft (unless the
 copied home already has one, or you pass `--no-readme`): it documents the
-install/auth/run flow for consumers and auto-fills the credential env var(s)
-discovered from the agent's config, with `TODO`s for you to fill in.
+install/auth/run flow for consumers, filled in with the agent's `<owner>/<repo>`
+and the credential env var(s) discovered from its config.
 
 ```sh
 # Create the empty repo on GitHub first, then publish with a remote:
-encave publish review-agent --tag v1.0.0 --remote git@github.com:dai/review-agent.git
+encave publish dai/review-agent --tag v1.0.0 --remote git@github.com:dai/review-agent.git
 ```
 
 `encave publish` runs a fail-closed secret scan, commits, and tags. Then:
@@ -212,7 +216,7 @@ encave publish review-agent --tag v1.0.0 --remote git@github.com:dai/review-agen
 
 ```
 <root>/                          # ~/.encave (override with ENCAVE_ROOT)
-├── _drafts/<name>/              # `encave new` working area (unpublished)
+├── _drafts/<owner>/<repo>/      # `encave new` working area (unpublished)
 └── <owner>/<repo>/              # an installed agent = one isolated agent home
     ├── config.toml              # non-secret config (provider, env_key NAME, wire_api)
     ├── .encave.toml             # non-secret agent metadata (target adapter)

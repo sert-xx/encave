@@ -6,16 +6,17 @@ import (
 )
 
 func TestRenderAgentReadmeWithAuthVars(t *testing.T) {
-	out := renderAgentReadme("review-agent", "codex", []string{"PROXY_TOKEN"})
+	out := renderAgentReadme("dai", "review-agent", "codex", []string{"PROXY_TOKEN"})
 
 	mustContain := []string{
 		"# review-agent",
-		"encave install github.com/<owner>/review-agent",
+		"encave install github.com/dai/review-agent",
 		"encave auth set --global",
 		"`PROXY_TOKEN`",
-		"encave <owner>/review-agent",
+		"encave dai/review-agent",
 		"encave run", // interactive picker mention
-		"encave publish review-agent",
+		"encave publish dai/review-agent",
+		"git@github.com:dai/review-agent.git",
 		"fail-closed secret scan",
 	}
 	for _, s := range mustContain {
@@ -26,7 +27,7 @@ func TestRenderAgentReadmeWithAuthVars(t *testing.T) {
 }
 
 func TestRenderAgentReadmeNoAuthVars(t *testing.T) {
-	out := renderAgentReadme("plain-agent", "codex", nil)
+	out := renderAgentReadme("bob", "plain-agent", "codex", nil)
 	if !strings.Contains(out, "does not declare an environment-based credential") {
 		t.Errorf("expected no-credential note, got:\n%s", out)
 	}

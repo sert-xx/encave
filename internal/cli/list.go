@@ -104,16 +104,27 @@ type draftAgent struct {
 
 func findDrafts(root string) []draftAgent {
 	var out []draftAgent
-	entries, err := os.ReadDir(paths.DraftsDir(root))
+	draftsRoot := paths.DraftsDir(root)
+	owners, err := os.ReadDir(draftsRoot)
 	if err != nil {
 		return out
 	}
-	for _, e := range entries {
-		if !e.IsDir() {
+	for _, o := range owners {
+		if !o.IsDir() {
 			continue
 		}
-		dir := filepath.Join(paths.DraftsDir(root), e.Name())
-		out = append(out, draftAgent{name: e.Name(), target: agentmeta.DefaultTargetOr(dir)})
+		ownerDir := filepath.Join(draftsRoot, o.Name())
+		repos, rerr := os.ReadDir(ownerDir)
+		if rerr != nil {
+			continue
+		}
+		for _, r := range repos {
+			if !r.IsDir() {
+				continue
+			}
+			dir := filepath.Join(ownerDir, r.Name())
+			out = append(out, draftAgent{name: o.Name() + "/" + r.Name(), target: agentmeta.DefaultTargetOr(dir)})
+		}
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].name < out[j].name })
 	return out

@@ -7,16 +7,17 @@ import (
 
 // renderAgentReadme produces a README.md tailored to a freshly scaffolded agent.
 // It documents the encave consumer workflow (install / auth / run) using the
-// agent's name and discovered auth environment variables, and leaves clearly
-// marked TODOs for the maintainer to describe what the agent does.
+// agent's GitHub identity and discovered auth environment variables, and leaves
+// clearly marked TODOs for the maintainer to describe what the agent does.
 //
-// name is the draft/agent name; target is the adapter name (e.g. "codex");
-// authVars are the environment variable names the agent's config expects its
-// credential in (may be empty).
-func renderAgentReadme(name, target string, authVars []string) string {
+// owner/repo are the agent's GitHub identity; target is the adapter name (e.g.
+// "codex"); authVars are the environment variable names the agent's config
+// expects its credential in (may be empty).
+func renderAgentReadme(owner, repo, target string, authVars []string) string {
+	ref := owner + "/" + repo
 	var b strings.Builder
 
-	fmt.Fprintf(&b, "# %s\n\n", name)
+	fmt.Fprintf(&b, "# %s\n\n", repo)
 	b.WriteString("> **TODO:** Describe what this agent is tuned for in one or two sentences\n")
 	b.WriteString("> (e.g. \"A thorough code-review agent with security and performance skills\").\n\n")
 
@@ -36,11 +37,9 @@ func renderAgentReadme(name, target string, authVars []string) string {
 	// Install
 	b.WriteString("## Install\n\n")
 	b.WriteString("```sh\n")
-	fmt.Fprintf(&b, "encave install github.com/<owner>/%s --tag <tag>\n", name)
+	fmt.Fprintf(&b, "encave install github.com/%s --tag <tag>\n", ref)
 	b.WriteString("```\n\n")
-	b.WriteString("Replace `<owner>` with the GitHub account or org hosting this repo, and\n")
-	b.WriteString("`<tag>` with a released version (pinning a tag gives byte-for-byte reproducible\n")
-	b.WriteString("installs).\n\n")
+	b.WriteString("Pin a released `<tag>` for a byte-for-byte reproducible install.\n\n")
 
 	// Credentials
 	b.WriteString("## Credentials\n\n")
@@ -56,7 +55,7 @@ func renderAgentReadme(name, target string, authVars []string) string {
 		b.WriteString("\nStore the credential once (re-run when it expires, e.g. a rotating PAT):\n\n")
 		b.WriteString("```sh\n")
 		b.WriteString("encave auth set --global              # shared across all agents\n")
-		fmt.Fprintf(&b, "encave auth set --agent <owner>/%s   # or scope it to just this agent\n", name)
+		fmt.Fprintf(&b, "encave auth set --agent %s   # or scope it to just this agent\n", ref)
 		b.WriteString("```\n\n")
 		b.WriteString("> **TODO:** Document where to obtain this credential (e.g. which proxy/PAT)\n")
 		b.WriteString("> and any scope or expiry it needs.\n\n")
@@ -68,22 +67,22 @@ func renderAgentReadme(name, target string, authVars []string) string {
 	// Run
 	b.WriteString("## Run\n\n")
 	b.WriteString("```sh\n")
-	fmt.Fprintf(&b, "encave <owner>/%s                    # launch (run is the default command)\n", name)
+	fmt.Fprintf(&b, "encave %s                  # launch (run is the default command)\n", ref)
 	b.WriteString("encave run                           # or pick interactively from installed agents\n")
 	b.WriteString("```\n\n")
 	b.WriteString("Forward arguments to the underlying CLI after `--`, and preview the exact\n")
 	b.WriteString("command (with credentials redacted) without launching via `--dry-run`:\n\n")
 	b.WriteString("```sh\n")
-	fmt.Fprintf(&b, "encave <owner>/%s --dry-run -- exec \"do the task\"\n", name)
+	fmt.Fprintf(&b, "encave %s --dry-run -- exec \"do the task\"\n", ref)
 	b.WriteString("```\n\n")
 
 	// Maintainer section
 	b.WriteString("## For maintainers\n\n")
 	b.WriteString("This agent is built and published with encave:\n\n")
 	b.WriteString("```sh\n")
-	fmt.Fprintf(&b, "encave new %s                        # scaffold from your base home (secrets filtered)\n", name)
+	fmt.Fprintf(&b, "encave new %s                  # scaffold from your base home (secrets filtered)\n", ref)
 	b.WriteString("# ...tune agents/, skills/, config.toml...\n")
-	fmt.Fprintf(&b, "encave publish %s --tag <tag> --remote git@github.com:<owner>/%s.git\n", name, name)
+	fmt.Fprintf(&b, "encave publish %s --tag <tag> --remote git@github.com:%s.git\n", ref, ref)
 	b.WriteString("```\n\n")
 	b.WriteString("`encave publish` runs a fail-closed secret scan before committing: credentials\n")
 	b.WriteString("must live in the keyring, never in this repository.\n\n")
