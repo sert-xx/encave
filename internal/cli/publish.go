@@ -137,37 +137,43 @@ func cmdPublish(args []string) int {
 		errf("listing staged files: %v", err)
 		return 1
 	}
-	if len(staged) == 0 {
-		errf("nothing to publish (no changes staged in %s)", dir)
-		return 1
-	}
 
-	// --- fail-closed secret scan over staged content ---
-	findings := scanStaged(dir, staged)
-	if len(findings) > 0 {
-		fmt.Fprintf(os.Stderr, "\n✋ publish blocked: %d possible secret(s) detected in staged files.\n", len(findings))
-		printFindingsTo(os.Stderr, findings, 50)
-		fmt.Fprintln(os.Stderr, "\nRemove the secrets (store credentials with `encave auth set` instead),")
-		fmt.Fprintln(os.Stderr, "or add false positives to .gitignore, then publish again.")
-		if !*force {
+	if len(staged) > 0 {
+		// --- fail-closed secret scan over staged content ---
+		findings := scanStaged(dir, staged)
+		if len(findings) > 0 {
+			fmt.Fprintf(os.Stderr, "\n✋ publish blocked: %d possible secret(s) detected in staged files.\n", len(findings))
+			printFindingsTo(os.Stderr, findings, 50)
+			fmt.Fprintln(os.Stderr, "\nRemove the secrets (store credentials with `encave auth set` instead),")
+			fmt.Fprintln(os.Stderr, "or add false positives to .gitignore, then publish again.")
+			if !*force {
+				return 1
+			}
+			fmt.Fprintln(os.Stderr, "\n⚠  --force given: proceeding DESPITE the findings above. This may leak secrets.")
+		}
+
+		commitMsg := *message
+		if commitMsg == "" {
+			if *tag != "" {
+				commitMsg = fmt.Sprintf("Publish %s %s", ref, *tag)
+			} else {
+				commitMsg = fmt.Sprintf("Publish %s", ref)
+			}
+		}
+		if err := gitutil.Commit(dir, commitMsg); err != nil {
+			errf("commit failed: %v", err)
 			return 1
 		}
-		fmt.Fprintln(os.Stderr, "\n⚠  --force given: proceeding DESPITE the findings above. This may leak secrets.")
-	}
-
-	commitMsg := *message
-	if commitMsg == "" {
-		if *tag != "" {
-			commitMsg = fmt.Sprintf("Publish %s %s", ref, *tag)
-		} else {
-			commitMsg = fmt.Sprintf("Publish %s", ref)
-		}
-	}
-	if err := gitutil.Commit(dir, commitMsg); err != nil {
-		errf("commit failed: %v", err)
+		fmt.Printf("Committed: %s\n", commitMsg)
+	} else if !gitutil.HasCommits(dir) {
+		// Truly empty: nothing staged and no existing commit to tag/push.
+		errf("nothing to publish (no commits and no changes staged in %s)", dir)
+		fmt.Fprintf(os.Stderr, "  add some agent files first, then publish.\n")
 		return 1
+	} else {
+		// Clean tree but an existing commit — still allow tagging/pushing it.
+		fmt.Println("No new changes to commit; tagging/pushing the current commit.")
 	}
-	fmt.Printf("Committed: %s\n", commitMsg)
 
 	if *tag != "" {
 		if gitutil.TagExists(dir, *tag) {
@@ -184,8 +190,11 @@ func cmdPublish(args []string) int {
 	if !gitutil.RemoteExists(dir, "origin") {
 		url := *remote
 		if url == "" && interactive {
+			// No default: in a corporate setting, accidentally accepting a
+			// public github.com default could leak the agent. The user must
+			// type the full remote URL (blank to skip).
 			if confirm("No git remote is set. Add 'origin' now?") {
-				url = promptLine("Remote URL", fmt.Sprintf("git@github.com:%s.git", ref))
+				url = promptLine("Remote URL (blank to skip)", "")
 			}
 		}
 		if url != "" {
