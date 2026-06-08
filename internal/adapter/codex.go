@@ -34,9 +34,9 @@ const (
 // user's home at launch. Derived from the Codex ConfigToml struct
 // (codex-rs/core/src/config/mod.rs); unknown/new keys default to NOT packaged.
 var codexConfigWhitelist = map[string]bool{
-	// Model & provider
-	"model": true, "review_model": true, "model_provider": true,
-	"model_provider_id": true, "model_providers": true,
+	// Model (NOT model_provider / model_providers — those are environment-specific;
+	// see note below)
+	"model": true, "review_model": true,
 	"model_reasoning_effort": true, "plan_mode_reasoning_effort": true,
 	"model_reasoning_summary": true, "model_supports_reasoning_summaries": true,
 	"model_verbosity": true, "model_context_window": true,
@@ -49,8 +49,9 @@ var codexConfigWhitelist = map[string]bool{
 	"include_permissions_instructions": true, "include_apps_instructions": true,
 	"include_collaboration_mode_instructions": true, "include_skill_instructions": true,
 	"include_environment_context": true,
-	// Safety posture (author's intended permissions/sandbox)
-	"sandbox_mode": true, "sandbox_workspace_write": true, "default_permissions": true,
+	// Safety posture (author's intended permissions/sandbox).
+	// NOT sandbox_workspace_write — it carries environment-specific local paths.
+	"sandbox_mode": true, "default_permissions": true,
 	"permissions": true, "profiles": true, "shell_environment_policy": true,
 	"approval_policy": true, "approvals_reviewer": true,
 	// Orchestration
@@ -65,10 +66,15 @@ var codexConfigWhitelist = map[string]bool{
 	"project_root_markers": true,
 }
 
-// Note: mcp_servers is intentionally NOT whitelisted. Reusing another person's
-// MCP server config can run arbitrary local commands/endpoints, so it is left to
-// the user's own home config; `new` lists the author's MCP servers in the README
-// as setup requirements (see MCPServers).
+// Note: several keys are intentionally NOT whitelisted because they are
+// environment-specific or risky to inherit from someone else:
+//   - mcp_servers: can run arbitrary local commands/endpoints.
+//   - model_provider / model_providers: provider wiring (base URL, auth env var,
+//     wire protocol) belongs to the executor's environment.
+//   - sandbox_workspace_write: carries absolute local writable paths.
+// These come from the user's own home config at launch; `new` lists the author's
+// MCP servers and model providers in the README as setup requirements (see
+// MCPServers / ModelProviders).
 
 // ConfigLayout implements Adapter: Codex uses the base/effective split.
 func (Codex) ConfigLayout() (base, effective string) {
@@ -138,21 +144,6 @@ func encodeTOML(m map[string]any) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-// readFirst returns the contents of the first path that exists, or (nil, nil) if
-// none do.
-func readFirst(paths ...string) ([]byte, error) {
-	for _, p := range paths {
-		data, err := os.ReadFile(p)
-		if err == nil {
-			return data, nil
-		}
-		if !os.IsNotExist(err) {
-			return nil, fmt.Errorf("reading %s: %w", p, err)
-		}
-	}
-	return nil, nil
-}
-
 // Codex is the adapter for the Codex CLI, encave's first target.
 //
 // Key facts the adapter encodes (verify against current Codex docs before
@@ -204,23 +195,16 @@ func (Codex) Validate(agentDir string) error {
 	return fmt.Errorf("agent home %q has no %s or %s (not a valid Codex home?)", agentDir, codexBaseConfig, codexEffectiveConfig)
 }
 
-// AuthEnvVars implements Adapter by reading the agent config and collecting every
-// env var name referenced by a model provider's env_key or env_http_headers.
-// Provider config is whitelisted, so it lives in the base config; the effective
-// config.toml (legacy or generated) is the fallback.
-func (Codex) AuthEnvVars(agentDir string) ([]string, error) {
-	data, err := readFirst(
-		filepath.Join(agentDir, codexBaseConfig),
-		filepath.Join(agentDir, codexEffectiveConfig),
-	)
-	if err != nil {
-		return nil, err
-	}
-	if data == nil {
+// AuthEnvVars implements Adapter by collecting every env var name referenced by
+// a model provider's env_key or env_http_headers. Provider config is not
+// packaged, so callers pass the effective/merged config (which includes the
+// user's home providers) at launch, or the source config when generating docs.
+func (Codex) AuthEnvVars(configData []byte) ([]string, error) {
+	if len(bytes.TrimSpace(configData)) == 0 {
 		return nil, nil
 	}
 	var raw map[string]any
-	if err := toml.Unmarshal(data, &raw); err != nil {
+	if err := toml.Unmarshal(configData, &raw); err != nil {
 		return nil, fmt.Errorf("parsing config: %w", err)
 	}
 
@@ -285,6 +269,41 @@ func (Codex) MCPServers(configData []byte) ([]MCPServerInfo, error) {
 						info.Args = append(info.Args, as)
 					}
 				}
+			}
+		}
+		out = append(out, info)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	return out, nil
+}
+
+// ModelProviders implements Adapter by reading [model_providers.<name>] tables
+// from a full config and returning each provider's base_url, wire_api and the
+// env var its token is read from.
+func (Codex) ModelProviders(configData []byte) ([]ProviderInfo, error) {
+	if len(bytes.TrimSpace(configData)) == 0 {
+		return nil, nil
+	}
+	var raw map[string]any
+	if err := toml.Unmarshal(configData, &raw); err != nil {
+		return nil, fmt.Errorf("parsing config: %w", err)
+	}
+	providers, ok := raw["model_providers"].(map[string]any)
+	if !ok {
+		return nil, nil
+	}
+	out := make([]ProviderInfo, 0, len(providers))
+	for name, pv := range providers {
+		info := ProviderInfo{Name: name}
+		if p, ok := pv.(map[string]any); ok {
+			if s, ok := p["base_url"].(string); ok {
+				info.BaseURL = s
+			}
+			if s, ok := p["wire_api"].(string); ok {
+				info.WireAPI = s
+			}
+			if s, ok := p["env_key"].(string); ok {
+				info.EnvKey = s
 			}
 		}
 		out = append(out, info)

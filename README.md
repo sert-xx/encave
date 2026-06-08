@@ -278,11 +278,14 @@ telemetry and local paths. To keep these on the right side:
 This means each executor's existing project-trust decisions apply automatically,
 and no author's local paths/trust ship inside an agent.
 
-**MCP servers are not packaged.** `mcp_servers` is intentionally left out of the
-whitelist — reusing another person's MCP server config can run arbitrary local
-commands or endpoints. Instead, `new` lists the author's configured MCP servers
-in the generated README as setup requirements, so the consumer installs and
-configures them in their own `~/.codex/config.toml`.
+**MCP servers and the model provider are not packaged.** `mcp_servers` and
+`model_provider`/`model_providers` (plus `sandbox_workspace_write`, which carries
+local paths) are intentionally left out of the whitelist — reusing another
+person's MCP config or provider wiring (internal base URLs, auth env vars) is
+risky and environment-specific. They come from the user's own
+`~/.codex/config.toml` at launch (so credential injection reads the user's
+provider env var), and `new` lists the author's MCP servers and model providers
+in the generated README as setup requirements.
 
 Credentials live only in the OS keyring under the `encave` service.
 

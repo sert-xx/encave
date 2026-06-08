@@ -8,7 +8,7 @@ import (
 )
 
 func TestRenderAgentReadmeWithAuthVars(t *testing.T) {
-	out := renderAgentReadme("dai", "review-agent", "codex", []string{"PROXY_TOKEN"}, nil)
+	out := renderAgentReadme("dai", "review-agent", "codex", []string{"PROXY_TOKEN"}, nil, nil)
 
 	mustContain := []string{
 		"# review-agent",
@@ -32,7 +32,7 @@ func TestRenderAgentReadmeWithAuthVars(t *testing.T) {
 }
 
 func TestRenderAgentReadmeNoAuthVars(t *testing.T) {
-	out := renderAgentReadme("bob", "plain-agent", "codex", nil, nil)
+	out := renderAgentReadme("bob", "plain-agent", "codex", nil, nil, nil)
 	if !strings.Contains(out, "does not declare an environment-based credential") {
 		t.Errorf("expected no-credential note, got:\n%s", out)
 	}
@@ -41,12 +41,30 @@ func TestRenderAgentReadmeNoAuthVars(t *testing.T) {
 	}
 }
 
+func TestRenderAgentReadmeListsModelProviders(t *testing.T) {
+	providers := []adapter.ProviderInfo{
+		{Name: "proxy", BaseURL: "https://proxy.example.com/v1", WireAPI: "responses", EnvKey: "PROXY_TOKEN"},
+	}
+	out := renderAgentReadme("dai", "review-agent", "codex", []string{"PROXY_TOKEN"}, providers, nil)
+	for _, s := range []string{
+		"## Model provider",
+		"not** bundled",
+		"**proxy**",
+		"base_url `https://proxy.example.com/v1`",
+		"token env var `PROXY_TOKEN`",
+	} {
+		if !strings.Contains(out, s) {
+			t.Errorf("provider README missing %q\n---\n%s", s, out)
+		}
+	}
+}
+
 func TestRenderAgentReadmeListsMCPServers(t *testing.T) {
 	mcps := []adapter.MCPServerInfo{
 		{Name: "github", Command: "npx", Args: []string{"-y", "@modelcontextprotocol/server-github"}},
 		{Name: "linear", URL: "https://mcp.linear.app/sse"},
 	}
-	out := renderAgentReadme("dai", "review-agent", "codex", nil, mcps)
+	out := renderAgentReadme("dai", "review-agent", "codex", nil, nil, mcps)
 
 	for _, s := range []string{
 		"## Required MCP servers",
