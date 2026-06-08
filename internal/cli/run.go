@@ -190,8 +190,18 @@ func launchAgent(root string, ref AgentRef, agentArgs []string, model, sandbox s
 		return 1
 	}
 
-	// Determine which env vars the agent's config expects auth in.
-	authVars, err := ad.AuthEnvVars(agentDir)
+	// Resolve the effective config the target CLI will read (the agent's base
+	// config merged with the user's home config). Auth env vars are read from it,
+	// since the model provider config is environment-specific and comes from the
+	// user's home.
+	cfgData, cfgPath, cfgWrite, cerr := resolveEffectiveConfig(ad, agentDir)
+	if cerr != nil {
+		errf("preparing effective config: %v", cerr)
+		return 1
+	}
+
+	// Determine which env vars the effective config expects auth in.
+	authVars, err := ad.AuthEnvVars(cfgData)
 	if err != nil {
 		errf("inspecting auth configuration: %v", err)
 		return 1
@@ -243,24 +253,15 @@ func launchAgent(root string, ref AgentRef, agentArgs []string, model, sandbox s
 	// user's base home so the user's own settings apply to this isolated agent.
 	links := personalLinkPlan(ad, agentDir)
 
-	// Generate the effective config the target CLI reads, by merging the agent's
-	// committed base config with the user's own home config (environment/personal
-	// keys come from the user; the agent's keys win).
-	cfgPath, cfgData, cfgApplicable, cerr := buildEffectiveConfig(ad, agentDir)
-	if cerr != nil {
-		errf("preparing effective config: %v", cerr)
-		return 1
-	}
-
 	if dryRun {
 		printDryRun(ref, ad, agentDir, spec, authVars, secretScope, env, links)
-		if cfgApplicable {
+		if cfgWrite {
 			fmt.Printf("config:   would generate %s (agent base merged with your home config)\n", cfgPath)
 		}
 		return 0
 	}
 
-	if cfgApplicable {
+	if cfgWrite {
 		if err := os.WriteFile(cfgPath, cfgData, 0o644); err != nil {
 			errf("writing effective config: %v", err)
 			return 1
@@ -344,22 +345,28 @@ func printDryRun(ref AgentRef, ad adapter.Adapter, agentDir string, spec adapter
 	}
 }
 
-// buildEffectiveConfig computes the effective config the target CLI reads, by
-// merging the agent's committed base config with the user's home config. It
-// returns the destination path and bytes to write, applicable=false when the
-// adapter has no base/effective split or the agent has no base config (e.g. a
-// legacy agent that committed config.toml directly).
-func buildEffectiveConfig(ad adapter.Adapter, agentDir string) (dst string, data []byte, applicable bool, err error) {
+// resolveEffectiveConfig returns the config the target CLI should read (used for
+// auth discovery and launch). For an agent with a base config it merges that
+// base over the user's home config and reports write=true with the path to write
+// the generated config to. For a legacy agent (committed config.toml, no base)
+// or an adapter without a config split, it returns the existing config bytes for
+// auth discovery and write=false.
+func resolveEffectiveConfig(ad adapter.Adapter, agentDir string) (data []byte, writePath string, write bool, err error) {
 	base, eff := ad.ConfigLayout()
 	if base == "" {
-		return "", nil, false, nil
+		return nil, "", false, nil
 	}
 	baseData, berr := os.ReadFile(filepath.Join(agentDir, base))
 	if berr != nil {
 		if os.IsNotExist(berr) {
-			return "", nil, false, nil // legacy agent without a base config
+			// Legacy agent: read the committed effective config for auth discovery.
+			d, rerr := os.ReadFile(filepath.Join(agentDir, eff))
+			if rerr != nil && !os.IsNotExist(rerr) {
+				return nil, "", false, rerr
+			}
+			return d, "", false, nil
 		}
-		return "", nil, false, berr
+		return nil, "", false, berr
 	}
 	var homeData []byte
 	if home, herr := ad.BaseHome(); herr == nil {
@@ -369,9 +376,9 @@ func buildEffectiveConfig(ad adapter.Adapter, agentDir string) (dst string, data
 	}
 	merged, merr := ad.BuildEffectiveConfig(baseData, homeData)
 	if merr != nil {
-		return "", nil, false, merr
+		return nil, "", false, merr
 	}
-	return filepath.Join(agentDir, eff), merged, true, nil
+	return merged, filepath.Join(agentDir, eff), true, nil
 }
 
 // personalLink is a planned symlink from a user's base-home personal subdir

@@ -14,9 +14,10 @@ import (
 // marked TODOs for the maintainer to describe what the agent does.
 //
 // owner/repo are the agent's GitHub identity; target is the adapter name (e.g.
-// "codex"); authVars are the credential env var names; mcps are the MCP servers
-// the source config referenced (may be empty).
-func renderAgentReadme(owner, repo, target string, authVars []string, mcps []adapter.MCPServerInfo) string {
+// "codex"); authVars are the credential env var names; providers and mcps are the
+// model providers and MCP servers the source config referenced (not packaged —
+// listed as setup requirements). Any of these may be empty.
+func renderAgentReadme(owner, repo, target string, authVars []string, providers []adapter.ProviderInfo, mcps []adapter.MCPServerInfo) string {
 	ref := owner + "/" + repo
 	var b strings.Builder
 
@@ -65,6 +66,32 @@ func renderAgentReadme(owner, repo, target string, authVars []string, mcps []ada
 	} else {
 		b.WriteString("This agent does not declare an environment-based credential in its config.\n")
 		b.WriteString("If it needs one, document it here and store it with `encave auth set`.\n\n")
+	}
+
+	// Required model provider (not bundled — provider wiring is environment-specific)
+	if len(providers) > 0 {
+		b.WriteString("## Model provider\n\n")
+		b.WriteString("This agent's model provider is **not** bundled (the base URL, auth env var,\n")
+		b.WriteString("and wire protocol are environment-specific). Configure a compatible provider\n")
+		b.WriteString("in your own `~/.codex/config.toml`. The author built it against:\n\n")
+		for _, p := range providers {
+			fmt.Fprintf(&b, "- **%s**", p.Name)
+			var bits []string
+			if p.BaseURL != "" {
+				bits = append(bits, "base_url `"+p.BaseURL+"`")
+			}
+			if p.WireAPI != "" {
+				bits = append(bits, "wire_api `"+p.WireAPI+"`")
+			}
+			if p.EnvKey != "" {
+				bits = append(bits, "token env var `"+p.EnvKey+"`")
+			}
+			if len(bits) > 0 {
+				b.WriteString(" — " + strings.Join(bits, ", "))
+			}
+			b.WriteString("\n")
+		}
+		b.WriteString("\n> **TODO:** Document how to obtain access to this provider for your environment.\n\n")
 	}
 
 	// Required MCP servers (not bundled — must be configured in the user's home)

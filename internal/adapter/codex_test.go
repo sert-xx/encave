@@ -1,8 +1,6 @@
 package adapter
 
 import (
-	"os"
-	"path/filepath"
 	"reflect"
 	"testing"
 
@@ -23,18 +21,8 @@ wire_api = "responses"
 "X-Tenant" = "PROXY_TENANT"
 `
 
-func writeConfig(t *testing.T, content string) string {
-	t.Helper()
-	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "config.toml"), []byte(content), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	return dir
-}
-
 func TestCodexAuthEnvVars(t *testing.T) {
-	dir := writeConfig(t, sampleConfig)
-	got, err := Codex{}.AuthEnvVars(dir)
+	got, err := Codex{}.AuthEnvVars([]byte(sampleConfig))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -45,8 +33,7 @@ func TestCodexAuthEnvVars(t *testing.T) {
 }
 
 func TestCodexAuthEnvVarsNoProviders(t *testing.T) {
-	dir := writeConfig(t, "model = \"x\"\n")
-	got, err := Codex{}.AuthEnvVars(dir)
+	got, err := Codex{}.AuthEnvVars([]byte("model = \"x\"\n"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -182,12 +169,12 @@ theme = "dark"
 	if err := toml.Unmarshal(out, &m); err != nil {
 		t.Fatal(err)
 	}
-	for _, keep := range []string{"model", "approval_policy", "model_providers", "agents"} {
+	for _, keep := range []string{"model", "approval_policy", "agents"} {
 		if _, ok := m[keep]; !ok {
 			t.Errorf("whitelisted key %q was dropped", keep)
 		}
 	}
-	for _, drop := range []string{"projects", "tui", "mcp_servers"} {
+	for _, drop := range []string{"projects", "tui", "mcp_servers", "model_providers", "model_provider", "sandbox_workspace_write"} {
 		if _, ok := m[drop]; ok {
 			t.Errorf("non-whitelisted key %q was kept", drop)
 		}

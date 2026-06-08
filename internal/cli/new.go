@@ -185,12 +185,14 @@ func maybeWriteReadme(dst string, ref AgentRef, ad adapter.Adapter, srcConfig []
 		replaced = true
 	}
 
-	// Best-effort: surface the agent's auth env vars and the MCP servers it
-	// expects (the latter from the full source config, since they aren't packaged).
-	authVars, _ := ad.AuthEnvVars(dst)
+	// Best-effort: surface, from the author's full source config, the auth env
+	// vars, the model providers, and the MCP servers the agent expects (none of
+	// which are packaged) so the README can list them as setup requirements.
+	authVars, _ := ad.AuthEnvVars(srcConfig)
+	providers, _ := ad.ModelProviders(srcConfig)
 	mcps, _ := ad.MCPServers(srcConfig)
 
-	content := renderAgentReadme(ref.Owner, ref.Repo, ad.Name(), authVars, mcps)
+	content := renderAgentReadme(ref.Owner, ref.Repo, ad.Name(), authVars, providers, mcps)
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		return fmt.Sprintf("not written (%v)", err)
 	}

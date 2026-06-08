@@ -62,10 +62,12 @@ type Adapter interface {
 	// target before launching.
 	Validate(agentDir string) error
 
-	// AuthEnvVars inspects the agent's committed config and returns the names of
-	// the environment variables that should receive the injected auth secret.
-	// An empty result means the agent declares no env-based auth.
-	AuthEnvVars(agentDir string) ([]string, error)
+	// AuthEnvVars inspects a target config and returns the names of the
+	// environment variables that should receive the injected auth secret (read
+	// from a model provider's env_key / env_http_headers). An empty result means
+	// no env-based auth. It takes the resolved/effective config bytes, since the
+	// provider config may come from the user's home at launch.
+	AuthEnvVars(configData []byte) ([]string, error)
 
 	// BuildLaunch turns a LaunchRequest into a concrete command.
 	BuildLaunch(req LaunchRequest) (LaunchSpec, error)
@@ -107,6 +109,21 @@ type Adapter interface {
 	// is risky), so `new` lists them in the generated README as setup
 	// requirements for the user's own home config. Returns nil if none / N/A.
 	MCPServers(configData []byte) ([]MCPServerInfo, error)
+
+	// ModelProviders parses a full target config and returns the model providers
+	// it declares. Like MCP servers, providers are not packaged (they are
+	// environment-specific — base URL, auth env var, wire protocol); `new` lists
+	// them in the README as setup requirements for the user's own home config.
+	ModelProviders(configData []byte) ([]ProviderInfo, error)
+}
+
+// ProviderInfo describes a model provider an agent's source config referenced,
+// for documenting setup requirements in the generated README.
+type ProviderInfo struct {
+	Name    string // provider id/name
+	BaseURL string // endpoint base URL
+	WireAPI string // wire protocol (e.g. "responses", "chat")
+	EnvKey  string // env var the provider reads its bearer token from
 }
 
 // MCPServerInfo describes an MCP server an agent's source config referenced, for
