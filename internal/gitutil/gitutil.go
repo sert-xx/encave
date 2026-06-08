@@ -142,6 +142,30 @@ func CurrentRef(dir string) string {
 	return "unknown"
 }
 
+// defaultFirstTag is suggested when a repo has no semver tags yet.
+const defaultFirstTag = "v0.1.0"
+
+// NextPatchTag suggests the next release tag for dir: the highest existing
+// vMAJOR.MINOR.PATCH tag with its patch incremented, or v0.1.0 when there are no
+// semver tags yet.
+func NextPatchTag(dir string) string {
+	latest, err := LatestSemverTag(dir)
+	if err != nil {
+		return defaultFirstTag
+	}
+	return nextPatch(latest)
+}
+
+// nextPatch returns the patch-incremented successor of a vX.Y.Z tag, or
+// defaultFirstTag when latest is empty or not semver.
+func nextPatch(latest string) string {
+	v := parseSemver(latest)
+	if v == nil {
+		return defaultFirstTag
+	}
+	return fmt.Sprintf("v%d.%d.%d", v[0], v[1], v[2]+1)
+}
+
 // LatestSemverTag returns the highest vMAJOR.MINOR.PATCH tag in dir, or "" if
 // none exist. Comparison is numeric per component; non-semver tags are ignored.
 func LatestSemverTag(dir string) (string, error) {
