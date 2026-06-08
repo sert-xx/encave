@@ -132,11 +132,12 @@ See what's installed (and any local drafts):
 encave list
 ```
 
-Launch by reference, or omit it to pick interactively from a numbered list:
+Launch by reference, or omit it to pick from an interactive menu (navigate with
+↑/↓, Enter to choose, `q` to cancel):
 
 ```sh
 encave dai/review-agent            # run is the default command
-encave run                         # choose from the installed agents
+encave run                         # arrow-key menu of installed agents (+ your own home)
 ```
 
 Anything after `--` is forwarded verbatim to the target CLI. Preview the exact

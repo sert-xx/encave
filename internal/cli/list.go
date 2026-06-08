@@ -107,43 +107,27 @@ func pickLaunchTarget(root string) (runSelection, bool) {
 		return runSelection{}, false
 	}
 
-	fmt.Println("Choose what to launch:")
-	for i, a := range agents {
-		fmt.Printf("  %2d) %-30s [%s] %s\n", i+1, a.ref, a.target, a.ref2)
+	labels := make([]string, 0, len(agents)+1)
+	for _, a := range agents {
+		labels = append(labels, fmt.Sprintf("%-30s [%s] %s", a.ref, a.target, a.ref2))
 	}
 	// The native default home is always the last entry.
-	nativeLabel := fmt.Sprintf("your default %s home", adapter.DefaultName)
-	fmt.Printf("  %2d) %-30s (your own setup; no isolation/injection)\n", len(agents)+1, nativeLabel)
+	labels = append(labels, fmt.Sprintf("%-30s (your own setup; no isolation/injection)",
+		"your default "+adapter.DefaultName+" home"))
 
-	total := len(agents) + 1
-	reader := bufio.NewReader(os.Stdin)
-	for attempts := 0; attempts < 3; attempts++ {
-		fmt.Printf("Select [1-%d] (q to cancel): ", total)
-		line, err := reader.ReadString('\n')
-		if err != nil && line == "" {
-			fmt.Println()
-			return runSelection{}, false
-		}
-		idx, cancel, cerr := parseAgentChoice(line, total)
-		if cancel {
-			return runSelection{}, false
-		}
-		if cerr != nil {
-			fmt.Fprintf(os.Stderr, "  %v\n", cerr)
-			continue
-		}
-		if idx == len(agents) { // the native-home entry
-			return runSelection{native: true}, true
-		}
-		ref, perr := parseAgentRef(agents[idx].ref)
-		if perr != nil {
-			errf("%v", perr)
-			return runSelection{}, false
-		}
-		return runSelection{ref: ref}, true
+	idx, ok := selectFromList("Choose what to launch (↑/↓, Enter; q to cancel):", labels)
+	if !ok {
+		return runSelection{}, false
 	}
-	errf("no valid selection made")
-	return runSelection{}, false
+	if idx == len(agents) { // the native-home entry
+		return runSelection{native: true}, true
+	}
+	ref, perr := parseAgentRef(agents[idx].ref)
+	if perr != nil {
+		errf("%v", perr)
+		return runSelection{}, false
+	}
+	return runSelection{ref: ref}, true
 }
 
 // pickAgentRef lists the installed agents and lets the user choose one
@@ -156,35 +140,49 @@ func pickAgentRef(root, header string) (AgentRef, bool) {
 		fmt.Fprintln(os.Stderr, "  create one first:  encave new <owner>/<repo>")
 		return AgentRef{}, false
 	}
-	fmt.Println(header)
+	labels := make([]string, len(agents))
 	for i, a := range agents {
-		fmt.Printf("  %2d) %-30s [%s] %s\n", i+1, a.ref, a.target, a.ref2)
+		labels[i] = fmt.Sprintf("%-30s [%s] %s", a.ref, a.target, a.ref2)
+	}
+	idx, ok := selectFromList(header, labels)
+	if !ok {
+		return AgentRef{}, false
+	}
+	ref, perr := parseAgentRef(agents[idx].ref)
+	if perr != nil {
+		errf("%v", perr)
+		return AgentRef{}, false
+	}
+	return ref, true
+}
+
+// numberedSelect is the fallback for selectFromList when an interactive ↑/↓ menu
+// can't be shown: it prints a numbered list and reads a choice from stdin.
+func numberedSelect(header string, labels []string) (int, bool) {
+	fmt.Println(header)
+	for i, l := range labels {
+		fmt.Printf("  %2d) %s\n", i+1, l)
 	}
 	reader := bufio.NewReader(os.Stdin)
 	for attempts := 0; attempts < 3; attempts++ {
-		fmt.Printf("Select [1-%d] (q to cancel): ", len(agents))
+		fmt.Printf("Select [1-%d] (q to cancel): ", len(labels))
 		line, err := reader.ReadString('\n')
 		if err != nil && line == "" {
 			fmt.Println()
-			return AgentRef{}, false
+			return 0, false
 		}
-		idx, cancel, cerr := parseAgentChoice(line, len(agents))
+		idx, cancel, cerr := parseAgentChoice(line, len(labels))
 		if cancel {
-			return AgentRef{}, false
+			return 0, false
 		}
 		if cerr != nil {
 			fmt.Fprintf(os.Stderr, "  %v\n", cerr)
 			continue
 		}
-		ref, perr := parseAgentRef(agents[idx].ref)
-		if perr != nil {
-			errf("%v", perr)
-			return AgentRef{}, false
-		}
-		return ref, true
+		return idx, true
 	}
 	errf("no valid selection made")
-	return AgentRef{}, false
+	return 0, false
 }
 
 // parseAgentChoice interprets one line of picker input against a list of size n.
