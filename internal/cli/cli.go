@@ -44,6 +44,7 @@ var knownCommands = map[string]func([]string) int{
 	"new":     cmdNew,
 	"publish": cmdPublish,
 	"install": cmdInstall,
+	"update":  cmdUpdate,
 	"run":     cmdRun,
 	"auth":    cmdAuth,
 	"list":    cmdList,
@@ -96,6 +97,7 @@ COMMANDS:
   new <owner>/<repo>      Scaffold a draft agent (secrets filtered, README template generated)
   publish <owner>/<repo>  Scan (fail-closed), commit, tag, and (with a remote) push a draft
   install <github-url>    Clone an agent and check out a tag into <root>/<owner>/<repo>
+  update [<owner>/<repo>] Update an agent to a tag (default: latest); --all for every agent
   run [<owner>/<repo>]    Launch an agent ("default" = your own home; no ref = pick)
   auth set|status|clear   Manage credentials in the OS keyring (values never printed)
   list                    List installed agents and local drafts

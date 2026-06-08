@@ -125,6 +125,12 @@ func Clone(url, dst string) error {
 	return err
 }
 
+// Fetch runs `git fetch` in dir with the given arguments.
+func Fetch(dir string, args ...string) error {
+	_, err := Run(dir, append([]string{"fetch"}, args...)...)
+	return err
+}
+
 // CheckoutTag checks out the given tag in dir (detached HEAD).
 func CheckoutTag(dir, tag string) error {
 	_, err := Run(dir, "checkout", "--quiet", "refs/tags/"+tag)
