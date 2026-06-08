@@ -31,3 +31,22 @@ func confirm(prompt string) bool {
 		return false
 	}
 }
+
+// promptLine asks for a single line of input on stdout. If the user enters
+// nothing, it returns def. When def is non-empty it is shown in the prompt.
+func promptLine(prompt, def string) string {
+	if def != "" {
+		fmt.Printf("%s [%s]: ", prompt, def)
+	} else {
+		fmt.Printf("%s: ", prompt)
+	}
+	r := bufio.NewReader(os.Stdin)
+	line, err := r.ReadString('\n')
+	if err != nil && line == "" {
+		return def
+	}
+	if s := strings.TrimSpace(line); s != "" {
+		return s
+	}
+	return def
+}
