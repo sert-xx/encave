@@ -60,7 +60,7 @@ environment for one launched child process, for that process's lifetime.
 ```sh
 # install a specific release — use the newest tag from the Releases page:
 # https://github.com/sert-xx/encave/releases
-go install github.com/sert-xx/encave@v0.5.8
+go install github.com/sert-xx/encave@v0.7.0
 ```
 
 > Prefer the latest release tag over `@latest`: the module proxy's `@latest`
@@ -116,6 +116,7 @@ encave update [<owner>/<repo>] Update an agent to a tag (default: latest); --all
 encave run [<owner>/<repo>]    Launch an agent ("default" = your own home; omit to pick)
 encave auth set|status|clear   Manage credentials in the OS keyring (values never printed)
 encave list                    List installed agents and local drafts
+encave remove [<owner>/<repo>] Delete an installed agent's directory (alias: rm)
 encave version | help
 ```
 
