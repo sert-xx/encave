@@ -14,26 +14,26 @@ func TestRenderAgentReadmeWithAuthVars(t *testing.T) {
 		"# review-agent",
 		"encave install github.com/dai/review-agent",
 		"encave auth set --global",
-		"needs a bearer token",
+		"ベアラートークン", // credentials section (JA)
 		"encave dai/review-agent",
 		"encave run", // interactive picker mention
 		"encave publish dai/review-agent",
 		"git@github.com:dai/review-agent.git",
-		"fail-closed secret scan",
+		"秘密スキャン", // fail-closed secret scan (JA)
 	}
 	for _, s := range mustContain {
 		if !strings.Contains(out, s) {
 			t.Errorf("README missing %q\n---\n%s", s, out)
 		}
 	}
-	if strings.Contains(out, "Required MCP servers") {
+	if strings.Contains(out, "必要な MCP サーバー") {
 		t.Errorf("should not render MCP section when there are none:\n%s", out)
 	}
 }
 
 func TestRenderAgentReadmeNoCredential(t *testing.T) {
 	out := renderAgentReadme("bob", "plain-agent", "codex", nil, nil, nil)
-	if !strings.Contains(out, "does not declare a model provider that needs a token") {
+	if !strings.Contains(out, "トークンを要するモデルプロバイダを宣言していません") {
 		t.Errorf("expected no-credential note, got:\n%s", out)
 	}
 }
@@ -44,12 +44,12 @@ func TestRenderAgentReadmeListsModelProviders(t *testing.T) {
 	}
 	out := renderAgentReadme("dai", "review-agent", "codex", []string{"PROXY_TOKEN"}, providers, nil)
 	for _, s := range []string{
-		"## Model provider",
-		"not** bundled",
+		"## モデルプロバイダ",
+		"含まれていません",
 		"**proxy**",
 		"base_url `https://proxy.example.com/v1`",
 		"wire_api `responses`",
-		"encave wires up the auth token",
+		"認証トークンの配線は encave",
 	} {
 		if !strings.Contains(out, s) {
 			t.Errorf("provider README missing %q\n---\n%s", s, out)
@@ -69,10 +69,10 @@ func TestRenderAgentReadmeListsMCPServers(t *testing.T) {
 	out := renderAgentReadme("dai", "review-agent", "codex", nil, nil, mcps)
 
 	for _, s := range []string{
-		"## Required MCP servers",
-		"not** bundled",
+		"## 必要な MCP サーバー",
+		"含まれません",
 		"**github** — `npx -y @modelcontextprotocol/server-github`",
-		"**linear** (remote) — `https://mcp.linear.app/sse`",
+		"**linear**（リモート） — `https://mcp.linear.app/sse`",
 	} {
 		if !strings.Contains(out, s) {
 			t.Errorf("MCP README missing %q\n---\n%s", s, out)

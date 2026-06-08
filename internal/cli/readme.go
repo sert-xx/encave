@@ -22,53 +22,53 @@ func renderAgentReadme(owner, repo, target string, authVars []string, providers 
 	var b strings.Builder
 
 	fmt.Fprintf(&b, "# %s\n\n", repo)
-	b.WriteString("> **TODO:** Describe what this agent is tuned for in one or two sentences\n")
-	b.WriteString("> (e.g. \"A thorough code-review agent with security and performance skills\").\n\n")
+	b.WriteString("> **TODO:** このエージェントが何向けにチューニングされているか、1〜2文で説明してください\n")
+	b.WriteString("> （例:「セキュリティと性能の観点を備えた、丁寧なコードレビュー用エージェント」）。\n\n")
 
-	b.WriteString("This is an [**encave**](https://github.com/sert-xx/encave) agent: a")
-	b.WriteString(" self-contained, isolated agent home (configuration + orchestration +\n")
-	fmt.Fprintf(&b, "skills) for the **%s** CLI, distributed via GitHub. encave runs it in its own\n", target)
-	b.WriteString("home directory with credentials injected at launch, so it never touches your\n")
-	b.WriteString("personal setup and no secrets are stored in this repository.\n\n")
+	b.WriteString("これは [**encave**](https://github.com/sert-xx/encave) のエージェントです。")
+	fmt.Fprintf(&b, "**%s** CLI 用の自己完結・隔離されたエージェントホーム", target)
+	b.WriteString("（設定＋オーケストレーション＋skill）を GitHub 経由で配布します。encave は専用の\n")
+	b.WriteString("ホームディレクトリで起動し、起動時に認証情報を注入するため、あなたの個人環境には\n")
+	b.WriteString("一切触れず、秘密情報もこのリポジトリには保存されません。\n\n")
 
-	// Requirements
-	b.WriteString("## Requirements\n\n")
+	// 要件
+	b.WriteString("## 要件\n\n")
 	b.WriteString("- [encave](https://github.com/sert-xx/encave):\n")
 	b.WriteString("  `go install github.com/sert-xx/encave@latest`\n")
-	fmt.Fprintf(&b, "- The target CLI: **%s**\n", target)
-	b.WriteString("- On Linux, a running Secret Service (e.g. gnome-keyring) for the keyring\n\n")
+	fmt.Fprintf(&b, "- ターゲット CLI: **%s**\n", target)
+	b.WriteString("- Linux では keyring 用に稼働中の Secret Service（例: gnome-keyring）\n\n")
 
-	// Install
-	b.WriteString("## Install\n\n")
+	// インストール
+	b.WriteString("## インストール\n\n")
 	b.WriteString("```sh\n")
 	fmt.Fprintf(&b, "encave install github.com/%s --tag <tag>\n", ref)
 	b.WriteString("```\n\n")
-	b.WriteString("Pin a released `<tag>` for a byte-for-byte reproducible install.\n\n")
+	b.WriteString("リリース済みの `<tag>` を指定すると、バイト単位で再現可能なインストールになります。\n\n")
 
-	// Credentials
-	b.WriteString("## Credentials\n\n")
+	// 認証情報
+	b.WriteString("## 認証情報\n\n")
 	if len(providers) > 0 || len(authVars) > 0 {
-		b.WriteString("This agent's model provider needs a bearer token. Store it once in your OS\n")
-		b.WriteString("keyring; encave injects it into the provider at launch (it forces the\n")
-		b.WriteString("provider's `env_key`, so you don't set any environment variable yourself):\n\n")
+		b.WriteString("このエージェントのモデルプロバイダはベアラートークンを必要とします。OS の keyring に\n")
+		b.WriteString("一度保存すれば、encave が起動時にプロバイダへ注入します（プロバイダの `env_key` を\n")
+		b.WriteString("強制設定するので、環境変数を自分で設定する必要はありません）:\n\n")
 		b.WriteString("```sh\n")
-		b.WriteString("encave auth set --global              # shared across all agents\n")
-		fmt.Fprintf(&b, "encave auth set --agent %s   # or scope it to just this agent\n", ref)
+		b.WriteString("encave auth set --global              # 全エージェントで共有\n")
+		fmt.Fprintf(&b, "encave auth set --agent %s   # またはこのエージェント専用に\n", ref)
 		b.WriteString("```\n\n")
-		b.WriteString("> **TODO:** Document where to obtain this token (e.g. which proxy/PAT) and any\n")
-		b.WriteString("> scope or expiry it needs.\n\n")
+		b.WriteString("> **TODO:** このトークンの入手方法（どのプロキシ/PAT か）や、必要なスコープ・\n")
+		b.WriteString("> 有効期限を記載してください。\n\n")
 	} else {
-		b.WriteString("This agent does not declare a model provider that needs a token. If it needs\n")
-		b.WriteString("one, document it here and store it with `encave auth set`.\n\n")
+		b.WriteString("このエージェントはトークンを要するモデルプロバイダを宣言していません。必要であれば\n")
+		b.WriteString("ここに記載し、`encave auth set` で保存してください。\n\n")
 	}
 
-	// Required model provider (not bundled — provider wiring is environment-specific)
+	// モデルプロバイダ（パッケージに含めない＝環境固有）
 	if len(providers) > 0 {
-		b.WriteString("## Model provider\n\n")
-		b.WriteString("This agent's model provider is **not** bundled (the base URL and wire\n")
-		b.WriteString("protocol are environment-specific). Configure a compatible provider in your\n")
-		b.WriteString("own `~/.codex/config.toml` — encave wires up the auth token for it at launch.\n")
-		b.WriteString("The author built it against:\n\n")
+		b.WriteString("## モデルプロバイダ\n\n")
+		b.WriteString("このエージェントのモデルプロバイダはパッケージに**含まれていません**（base URL や\n")
+		b.WriteString("wire protocol は環境固有のため）。あなた自身の `~/.codex/config.toml` に対応する\n")
+		b.WriteString("プロバイダを設定してください。認証トークンの配線は encave が起動時に行います。\n")
+		b.WriteString("作者は次の設定で構築しました:\n\n")
 		for _, p := range providers {
 			fmt.Fprintf(&b, "- **%s**", p.Name)
 			var bits []string
@@ -83,19 +83,19 @@ func renderAgentReadme(owner, repo, target string, authVars []string, providers 
 			}
 			b.WriteString("\n")
 		}
-		b.WriteString("\n> **TODO:** Document how to obtain access to this provider for your environment.\n\n")
+		b.WriteString("\n> **TODO:** あなたの環境でこのプロバイダにアクセスする方法を記載してください。\n\n")
 	}
 
-	// Required MCP servers (not bundled — must be configured in the user's home)
+	// 必要な MCP サーバー（パッケージに含めない＝各自のホームで設定）
 	if len(mcps) > 0 {
-		b.WriteString("## Required MCP servers\n\n")
-		b.WriteString("This agent expects the following MCP servers. They are **not** bundled (reusing\n")
-		b.WriteString("another person's MCP config is risky), so install and configure them in your\n")
-		b.WriteString("own `~/.codex/config.toml` before use:\n\n")
+		b.WriteString("## 必要な MCP サーバー\n\n")
+		b.WriteString("このエージェントは次の MCP サーバーを前提とします。これらはパッケージに**含まれません**\n")
+		b.WriteString("（他人の MCP 設定の流用は危険なため）。利用前に、あなた自身の `~/.codex/config.toml`\n")
+		b.WriteString("にインストール・設定してください:\n\n")
 		for _, m := range mcps {
 			switch {
 			case m.URL != "":
-				fmt.Fprintf(&b, "- **%s** (remote) — `%s`\n", m.Name, m.URL)
+				fmt.Fprintf(&b, "- **%s**（リモート） — `%s`\n", m.Name, m.URL)
 			case m.Command != "":
 				cmd := m.Command
 				if len(m.Args) > 0 {
@@ -106,34 +106,34 @@ func renderAgentReadme(owner, repo, target string, authVars []string, providers 
 				fmt.Fprintf(&b, "- **%s**\n", m.Name)
 			}
 		}
-		b.WriteString("\n> **TODO:** Add install/setup notes for each server (package, auth, env).\n\n")
+		b.WriteString("\n> **TODO:** 各サーバーの導入・設定メモ（パッケージ、認証、環境変数）を追記してください。\n\n")
 	}
 
-	// Run
-	b.WriteString("## Run\n\n")
+	// 実行
+	b.WriteString("## 実行\n\n")
 	b.WriteString("```sh\n")
-	fmt.Fprintf(&b, "encave %s                  # launch (run is the default command)\n", ref)
-	b.WriteString("encave run                           # or pick interactively from installed agents\n")
+	fmt.Fprintf(&b, "encave %s                  # 起動（run は省略可能なデフォルトコマンド）\n", ref)
+	b.WriteString("encave run                           # または一覧から対話的に選択\n")
 	b.WriteString("```\n\n")
-	b.WriteString("Forward arguments to the underlying CLI after `--`, and preview the exact\n")
-	b.WriteString("command (with credentials redacted) without launching via `--dry-run`:\n\n")
+	b.WriteString("`--` 以降の引数はターゲット CLI へそのまま渡されます。`--dry-run` で、起動せずに\n")
+	b.WriteString("実行コマンド（認証情報はマスク）を確認できます:\n\n")
 	b.WriteString("```sh\n")
 	fmt.Fprintf(&b, "encave %s --dry-run -- exec \"do the task\"\n", ref)
 	b.WriteString("```\n\n")
 
-	// Maintainer section
-	b.WriteString("## For maintainers\n\n")
-	b.WriteString("This agent is built and published with encave:\n\n")
+	// メンテナ向け
+	b.WriteString("## メンテナ向け\n\n")
+	b.WriteString("このエージェントは encave で構築・公開されています:\n\n")
 	b.WriteString("```sh\n")
-	fmt.Fprintf(&b, "encave new %s                  # scaffold from your base home (secrets filtered)\n", ref)
-	b.WriteString("# ...tune agents/, skills/, config.toml...\n")
+	fmt.Fprintf(&b, "encave new %s                  # ベースホームから雛形作成（秘密情報は除外）\n", ref)
+	b.WriteString("# ...agents/、skills/、config.toml を調整...\n")
 	fmt.Fprintf(&b, "encave publish %s --tag <tag> --remote git@github.com:%s.git\n", ref, ref)
 	b.WriteString("```\n\n")
-	b.WriteString("`encave publish` runs a fail-closed secret scan before committing: credentials\n")
-	b.WriteString("must live in the keyring, never in this repository.\n\n")
+	b.WriteString("`encave publish` はコミット前に fail-closed の秘密スキャンを実行します。認証情報は\n")
+	b.WriteString("keyring に保管し、このリポジトリには絶対に置かないでください。\n\n")
 
 	b.WriteString("---\n\n")
-	b.WriteString("<sub>Generated by `encave new`. Replace the TODOs above to describe this agent.</sub>\n")
+	b.WriteString("<sub>`encave new` により生成。上記の TODO を埋めて、このエージェントを説明してください。</sub>\n")
 
 	return b.String()
 }
