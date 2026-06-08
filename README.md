@@ -1,5 +1,7 @@
 # encave
 
+*Read this in [日本語](README.ja.md).*
+
 > Distribute and run tuned coding-agent configurations as **isolated**,
 > **reproducible**, self-contained agent homes — shared over GitHub, without
 > touching the receiver's own environment.
