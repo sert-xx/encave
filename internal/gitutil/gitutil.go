@@ -95,6 +95,12 @@ func HasStagedChanges(dir string) (bool, error) {
 	return len(files) > 0, nil
 }
 
+// HasCommits reports whether the repo has at least one commit (HEAD resolves).
+func HasCommits(dir string) bool {
+	_, err := Run(dir, "rev-parse", "--verify", "--quiet", "HEAD")
+	return err == nil
+}
+
 // Commit creates a commit with the given message.
 func Commit(dir, message string) error {
 	_, err := Run(dir, "commit", "-m", message)
