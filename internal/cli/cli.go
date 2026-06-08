@@ -48,6 +48,8 @@ var knownCommands = map[string]func([]string) int{
 	"run":     cmdRun,
 	"auth":    cmdAuth,
 	"list":    cmdList,
+	"remove":  cmdRemove,
+	"rm":      cmdRemove,
 	"version": cmdVersion,
 	"help":    cmdHelp,
 }
@@ -101,6 +103,7 @@ COMMANDS:
   run [<owner>/<repo>]    Launch an agent ("default" = your own home; no ref = pick)
   auth set|status|clear   Manage credentials in the OS keyring (values never printed)
   list                    List installed agents and local drafts
+  remove [<owner>/<repo>] Delete an installed agent's directory (alias: rm)
   version                 Print the encave version
   help                    Show this help
 

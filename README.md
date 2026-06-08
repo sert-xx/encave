@@ -157,6 +157,13 @@ encave update dai/review-agent --tag v1.2.0 # a specific tag
 encave update --all                         # every installed agent to its latest
 ```
 
+Remove an agent you no longer want (deletes its directory; confirms first, or
+pass `--force`):
+
+```sh
+encave remove dai/review-agent   # alias: encave rm
+```
+
 ### Launching your own (non-encave) home
 
 So encave can be your single entry point, `default` launches your own default
