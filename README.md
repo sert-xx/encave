@@ -228,6 +228,11 @@ passed as flags.
 - **Without a remote**: it stops without pushing and explains how to set one
   (the commit and tag are already created locally).
 
+After a tag is pushed, if the [GitHub CLI](https://cli.github.com/) (`gh`) is
+installed and can access the repo, encave offers to create a **GitHub release**
+for that tag (prompted; `--yes` creates it without asking). If `gh` is missing or
+the remote isn't a GitHub repo it can reach, this step is silently skipped.
+
 ## Security model
 
 1. **Secrets never enter the repo** — keyring + `.gitignore` + a fail-closed

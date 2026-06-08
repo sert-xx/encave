@@ -10,6 +10,7 @@ import (
 
 	"github.com/sert-xx/encave/internal/adapter"
 	"github.com/sert-xx/encave/internal/agentmeta"
+	"github.com/sert-xx/encave/internal/ghutil"
 	"github.com/sert-xx/encave/internal/gitutil"
 	"github.com/sert-xx/encave/internal/paths"
 	"github.com/sert-xx/encave/internal/scan"
@@ -253,7 +254,65 @@ func finishPublish(dir string, ref AgentRef, tag string, noPush, yes bool) int {
 		// proceed without prompting
 	}
 
-	return doPush(dir, tag, url)
+	if code := doPush(dir, tag, url); code != 0 {
+		return code
+	}
+
+	// After a tag is pushed, optionally cut a GitHub release for it.
+	if tag != "" {
+		maybeCreateRelease(dir, tag, yes)
+	}
+	return 0
+}
+
+// releaseMode is the resolved decision about whether/how to create a release.
+type releaseMode int
+
+const (
+	releaseSkip releaseMode = iota
+	releaseConfirm
+	releaseAuto
+)
+
+// releasePlan decides how to handle release creation: --yes creates without
+// prompting; otherwise prompt when interactive; otherwise skip.
+func releasePlan(yes, interactive bool) releaseMode {
+	switch {
+	case yes:
+		return releaseAuto
+	case interactive:
+		return releaseConfirm
+	default:
+		return releaseSkip
+	}
+}
+
+// maybeCreateRelease creates a GitHub release for the pushed tag when gh is
+// available and can access the repo. It is best-effort: any failure is a
+// warning, never fatal.
+func maybeCreateRelease(dir, tag string, yes bool) {
+	if !ghutil.Available() || !ghutil.CanAccessRepo(dir) {
+		return
+	}
+	if ghutil.ReleaseExists(dir, tag) {
+		fmt.Printf("GitHub release %s already exists.\n", tag)
+		return
+	}
+	switch releasePlan(yes, isInteractive()) {
+	case releaseSkip:
+		return
+	case releaseConfirm:
+		if !confirm(fmt.Sprintf("Create a GitHub release for %s?", tag)) {
+			return
+		}
+	case releaseAuto:
+		// proceed
+	}
+	if err := ghutil.CreateRelease(dir, tag); err != nil {
+		fmt.Fprintf(os.Stderr, "encave: warning: could not create GitHub release: %v\n", err)
+		return
+	}
+	fmt.Printf("Created GitHub release %s.\n", tag)
 }
 
 // doPush pushes the current branch (and the tag, if any) to origin.
