@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"sort"
 
 	"github.com/BurntSushi/toml"
@@ -111,10 +112,22 @@ func (Codex) BuildEffectiveConfig(base, home []byte) ([]byte, error) {
 	return encodeTOML(merged)
 }
 
-// encodeTOML serializes a map to TOML bytes.
+// encodeTOML serializes a map to TOML bytes keeping at most one level of [table]
+// header, with dotted keys inside (no indentation). It verifies the output
+// round-trips back to the same data; if anything is off, it falls back to the
+// standard encoder without indentation, so output is always valid.
 func encodeTOML(m map[string]any) ([]byte, error) {
+	if out, err := encodeOneLevelTOML(m); err == nil {
+		var back map[string]any
+		if err := toml.Unmarshal(out, &back); err == nil && reflect.DeepEqual(m, back) {
+			return out, nil
+		}
+	}
+	// Fallback: standard encoder, but without indentation.
 	var buf bytes.Buffer
-	if err := toml.NewEncoder(&buf).Encode(m); err != nil {
+	enc := toml.NewEncoder(&buf)
+	enc.Indent = ""
+	if err := enc.Encode(m); err != nil {
 		return nil, fmt.Errorf("encoding config: %w", err)
 	}
 	return buf.Bytes(), nil
