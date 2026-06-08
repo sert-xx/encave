@@ -58,12 +58,13 @@ environment for one launched child process, for that process's lifetime.
 ### Install with `go install` (recommended)
 
 ```sh
-# latest release
-go install github.com/sert-xx/encave@latest
-
-# …or pin a specific version
+# install a specific release — use the newest tag from the Releases page:
+# https://github.com/sert-xx/encave/releases
 go install github.com/sert-xx/encave@v0.5.8
 ```
+
+> Prefer the latest release tag over `@latest`: the module proxy's `@latest`
+> often lags behind the newest tag.
 
 `go install` places the `encave` binary in `$(go env GOBIN)`, falling back to
 `$(go env GOPATH)/bin`. Make sure that directory is on your `PATH`:
