@@ -58,12 +58,17 @@ var codexConfigWhitelist = map[string]bool{
 	"agent_max_depth": true, "agent_job_max_runtime_seconds": true,
 	"agent_interrupt_message_enabled": true, "multi_agent_v2": true,
 	// Tools & capabilities
-	"mcp_servers": true, "tools": true, "code_mode": true,
+	"tools": true, "code_mode": true,
 	"use_experimental_unified_exec_tool": true, "background_terminal_max_timeout": true,
 	"web_search": true, "web_search_config": true, "features": true,
 	// Project detection
 	"project_root_markers": true,
 }
+
+// Note: mcp_servers is intentionally NOT whitelisted. Reusing another person's
+// MCP server config can run arbitrary local commands/endpoints, so it is left to
+// the user's own home config; `new` lists the author's MCP servers in the README
+// as setup requirements (see MCPServers).
 
 // ConfigLayout implements Adapter: Codex uses the base/effective split.
 func (Codex) ConfigLayout() (base, effective string) {
@@ -247,6 +252,44 @@ func (Codex) AuthEnvVars(agentDir string) ([]string, error) {
 		out = append(out, k)
 	}
 	sort.Strings(out)
+	return out, nil
+}
+
+// MCPServers implements Adapter by reading [mcp_servers.<name>] tables from a
+// full config and returning each server's launch command/args or URL.
+func (Codex) MCPServers(configData []byte) ([]MCPServerInfo, error) {
+	if len(bytes.TrimSpace(configData)) == 0 {
+		return nil, nil
+	}
+	var raw map[string]any
+	if err := toml.Unmarshal(configData, &raw); err != nil {
+		return nil, fmt.Errorf("parsing config: %w", err)
+	}
+	servers, ok := raw["mcp_servers"].(map[string]any)
+	if !ok {
+		return nil, nil
+	}
+	out := make([]MCPServerInfo, 0, len(servers))
+	for name, sv := range servers {
+		info := MCPServerInfo{Name: name}
+		if s, ok := sv.(map[string]any); ok {
+			if c, ok := s["command"].(string); ok {
+				info.Command = c
+			}
+			if u, ok := s["url"].(string); ok {
+				info.URL = u
+			}
+			if args, ok := s["args"].([]any); ok {
+				for _, a := range args {
+					if as, ok := a.(string); ok {
+						info.Args = append(info.Args, as)
+					}
+				}
+			}
+		}
+		out = append(out, info)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out, nil
 }
 

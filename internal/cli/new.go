@@ -89,6 +89,7 @@ func cmdNew(args []string) int {
 	// Write the whitelist-filtered base config. The raw config.toml is excluded
 	// from the copy; the effective config.toml is generated at launch by merging
 	// this base with the user's own home config.
+	var srcConfig []byte // the user's full config, used for README MCP listing
 	configStatus := "n/a"
 	if base, eff := ad.ConfigLayout(); base != "" {
 		full, ferr := os.ReadFile(filepath.Join(src, eff))
@@ -96,6 +97,7 @@ func cmdNew(args []string) int {
 			errf("reading source config: %v", ferr)
 			return 1
 		}
+		srcConfig = full
 		baseData, berr := ad.BuildBaseConfig(full)
 		if berr != nil {
 			errf("filtering config to a whitelist: %v", berr)
@@ -130,7 +132,7 @@ func cmdNew(args []string) int {
 	// unless the user opted out or the copied home already has a README.
 	readmeStatus := "skipped (--no-readme)"
 	if !*noReadme {
-		readmeStatus = maybeWriteReadme(dst, ref, ad)
+		readmeStatus = maybeWriteReadme(dst, ref, ad, srcConfig)
 	}
 
 	// Initialize a git repo and make an initial commit containing only the
@@ -176,17 +178,19 @@ func cmdNew(args []string) int {
 // rarely applies to a specific agent; copy it back manually if you want it). It
 // returns a short status string for the summary output. Failures are reported
 // but non-fatal — scaffolding succeeds regardless.
-func maybeWriteReadme(dst string, ref AgentRef, ad adapter.Adapter) string {
+func maybeWriteReadme(dst string, ref AgentRef, ad adapter.Adapter, srcConfig []byte) string {
 	path := filepath.Join(dst, "README.md")
 	replaced := false
 	if _, err := os.Stat(path); err == nil {
 		replaced = true
 	}
 
-	// Best-effort: surface the agent's auth env vars in the template.
+	// Best-effort: surface the agent's auth env vars and the MCP servers it
+	// expects (the latter from the full source config, since they aren't packaged).
 	authVars, _ := ad.AuthEnvVars(dst)
+	mcps, _ := ad.MCPServers(srcConfig)
 
-	content := renderAgentReadme(ref.Owner, ref.Repo, ad.Name(), authVars)
+	content := renderAgentReadme(ref.Owner, ref.Repo, ad.Name(), authVars, mcps)
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		return fmt.Sprintf("not written (%v)", err)
 	}

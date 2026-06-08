@@ -262,10 +262,10 @@ state — credentials, history, session transcripts, the `state_*.sqlite` /
 ### config: agent-owned vs. environment
 
 Codex's `config.toml` mixes the agent author's settings (model, providers,
-sandbox/permissions, agents, MCP servers, …) with the executor's own,
-environment-specific state — most importantly `[projects]` trust levels, which
-record absolute local paths Codex auto-appends as you approve projects, plus UI,
-notifications, telemetry and local paths. To keep these on the right side:
+sandbox/permissions, agents, …) with the executor's own, environment-specific
+state — most importantly `[projects]` trust levels, which record absolute local
+paths Codex auto-appends as you approve projects, plus UI, notifications,
+telemetry and local paths. To keep these on the right side:
 
 - `new` writes **`config_base.toml`** containing only a **whitelist of
   agent-owned top-level keys**; everything else is left to the user's home.
@@ -277,6 +277,12 @@ notifications, telemetry and local paths. To keep these on the right side:
 
 This means each executor's existing project-trust decisions apply automatically,
 and no author's local paths/trust ship inside an agent.
+
+**MCP servers are not packaged.** `mcp_servers` is intentionally left out of the
+whitelist — reusing another person's MCP server config can run arbitrary local
+commands or endpoints. Instead, `new` lists the author's configured MCP servers
+in the generated README as setup requirements, so the consumer installs and
+configures them in their own `~/.codex/config.toml`.
 
 Credentials live only in the OS keyring under the `encave` service.
 
