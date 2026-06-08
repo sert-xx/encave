@@ -342,7 +342,9 @@ func (Codex) GitignoreLines() []string {
 		"# encave: personal settings — symlinked from your base home at launch",
 	}
 	for _, sub := range codexPersonalSubdirs {
-		out = append(out, sub+"/")
+		// No trailing slash: this also matches the symlink encave creates at
+		// new/install/run (a symlink is a file to git, so "rules/" would not).
+		out = append(out, sub)
 	}
 	return out
 }

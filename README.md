@@ -173,10 +173,17 @@ encave auth clear --global
 
 Some home subdirectories hold *your own* settings rather than the agent author's
 — for Codex, `rules` (your locally-approved commands). encave never packages
-these: `new` excludes them and `publish` gitignores them. Instead, at launch it
-symlinks the agent's `rules` to your base home's `~/.codex/rules`, so your
-personal approvals apply to every agent and any new approvals accumulate in one
-place. (An agent that already ships a real `rules/` directory is left untouched.)
+these: `new` excludes them and `publish` gitignores them. Instead it symlinks the
+agent's `rules` to your base home's `~/.codex/rules`, so your personal approvals
+apply to every agent and any new approvals accumulate in one place. (An agent
+that already ships a real `rules/` directory is left untouched.)
+
+The symlink is (re)created by `new`, `install`, and `run` — so it's effective
+immediately after you scaffold or install an agent, and visible while you edit
+(no accidentally copying your rules in). It is **not** committed: a symlink can't
+be portable across machines (the OS does not expand `~` or `$HOME` in link
+targets, and an absolute path would point at the author's home), so encave
+recreates it per-machine with your real home path instead.
 
 ### Creating and sharing an agent
 
