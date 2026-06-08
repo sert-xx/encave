@@ -47,33 +47,28 @@ func renderAgentReadme(owner, repo, target string, authVars []string, providers 
 
 	// Credentials
 	b.WriteString("## Credentials\n\n")
-	if len(authVars) > 0 {
-		b.WriteString("This agent reads its credential from the following environment variable")
-		if len(authVars) > 1 {
-			b.WriteString("s")
-		}
-		b.WriteString(", injected at launch from your OS keyring (never committed here):\n\n")
-		for _, v := range authVars {
-			fmt.Fprintf(&b, "- `%s`\n", v)
-		}
-		b.WriteString("\nStore the credential once (re-run when it expires, e.g. a rotating PAT):\n\n")
+	if len(providers) > 0 || len(authVars) > 0 {
+		b.WriteString("This agent's model provider needs a bearer token. Store it once in your OS\n")
+		b.WriteString("keyring; encave injects it into the provider at launch (it forces the\n")
+		b.WriteString("provider's `env_key`, so you don't set any environment variable yourself):\n\n")
 		b.WriteString("```sh\n")
 		b.WriteString("encave auth set --global              # shared across all agents\n")
 		fmt.Fprintf(&b, "encave auth set --agent %s   # or scope it to just this agent\n", ref)
 		b.WriteString("```\n\n")
-		b.WriteString("> **TODO:** Document where to obtain this credential (e.g. which proxy/PAT)\n")
-		b.WriteString("> and any scope or expiry it needs.\n\n")
+		b.WriteString("> **TODO:** Document where to obtain this token (e.g. which proxy/PAT) and any\n")
+		b.WriteString("> scope or expiry it needs.\n\n")
 	} else {
-		b.WriteString("This agent does not declare an environment-based credential in its config.\n")
-		b.WriteString("If it needs one, document it here and store it with `encave auth set`.\n\n")
+		b.WriteString("This agent does not declare a model provider that needs a token. If it needs\n")
+		b.WriteString("one, document it here and store it with `encave auth set`.\n\n")
 	}
 
 	// Required model provider (not bundled — provider wiring is environment-specific)
 	if len(providers) > 0 {
 		b.WriteString("## Model provider\n\n")
-		b.WriteString("This agent's model provider is **not** bundled (the base URL, auth env var,\n")
-		b.WriteString("and wire protocol are environment-specific). Configure a compatible provider\n")
-		b.WriteString("in your own `~/.codex/config.toml`. The author built it against:\n\n")
+		b.WriteString("This agent's model provider is **not** bundled (the base URL and wire\n")
+		b.WriteString("protocol are environment-specific). Configure a compatible provider in your\n")
+		b.WriteString("own `~/.codex/config.toml` — encave wires up the auth token for it at launch.\n")
+		b.WriteString("The author built it against:\n\n")
 		for _, p := range providers {
 			fmt.Fprintf(&b, "- **%s**", p.Name)
 			var bits []string
@@ -82,9 +77,6 @@ func renderAgentReadme(owner, repo, target string, authVars []string, providers 
 			}
 			if p.WireAPI != "" {
 				bits = append(bits, "wire_api `"+p.WireAPI+"`")
-			}
-			if p.EnvKey != "" {
-				bits = append(bits, "token env var `"+p.EnvKey+"`")
 			}
 			if len(bits) > 0 {
 				b.WriteString(" — " + strings.Join(bits, ", "))

@@ -283,9 +283,15 @@ and no author's local paths/trust ship inside an agent.
 local paths) are intentionally left out of the whitelist — reusing another
 person's MCP config or provider wiring (internal base URLs, auth env vars) is
 risky and environment-specific. They come from the user's own
-`~/.codex/config.toml` at launch (so credential injection reads the user's
-provider env var), and `new` lists the author's MCP servers and model providers
-in the generated README as setup requirements.
+`~/.codex/config.toml` at launch, and `new` lists the author's MCP servers and
+model providers in the generated README as setup requirements.
+
+**Auth wiring is owned by encave.** When generating the effective `config.toml`,
+encave drops Codex's own credential store (`cli_auth_credentials_store`) and
+forces every model provider's `env_key` to a fixed variable it injects the
+keyring token into. So a launch is authenticated even when the user's provider
+config declares no `env_key`, and the agent never depends on Codex's stored
+login — the token always comes from `encave auth set`.
 
 Credentials live only in the OS keyring under the `encave` service.
 

@@ -29,6 +29,12 @@ const (
 	codexEffectiveConfig = "config.toml"
 )
 
+// codexInjectedEnvKey is the environment variable encave injects the keyring
+// token into, and which it forces every model provider's env_key to point at
+// when generating the effective config. This decouples auth from whatever
+// env_key (if any) the user's home provider config declares.
+const codexInjectedEnvKey = "ENCAVE_CODEX_TOKEN"
+
 // codexConfigWhitelist is the set of top-level config.toml keys an agent owns and
 // ships. Everything else is treated as environment/personal and comes from the
 // user's home at launch. Derived from the Codex ConfigToml struct
@@ -120,6 +126,21 @@ func (Codex) BuildEffectiveConfig(base, home []byte) ([]byte, error) {
 			merged[k] = v // agent's keys win (full top-level replace)
 		}
 	}
+
+	// encave owns the auth wiring. Drop Codex's own credential store so it does
+	// not fall back to a stored login, and force every model provider to read its
+	// bearer token from the env var encave injects at launch — so auth works even
+	// when the provider config (from the user's home) declares no env_key.
+	delete(merged, "cli_auth_credentials_store")
+	delete(merged, "cli_auth_credentials_store_mode")
+	if mp, ok := merged["model_providers"].(map[string]any); ok {
+		for _, pv := range mp {
+			if p, ok := pv.(map[string]any); ok {
+				p["env_key"] = codexInjectedEnvKey
+			}
+		}
+	}
+
 	return encodeTOML(merged)
 }
 

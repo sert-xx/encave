@@ -241,6 +241,54 @@ func TestCodexBuildEffectiveConfigOverlay(t *testing.T) {
 	}
 }
 
+func TestCodexBuildEffectiveConfigForcesAuthWiring(t *testing.T) {
+	// Provider from the user's home with NO env_key, plus Codex's own credential
+	// store enabled. The generated config must drop the store and force env_key.
+	home := []byte(`
+cli_auth_credentials_store = "keyring"
+cli_auth_credentials_store_mode = "auto"
+model_provider = "proxy"
+
+[model_providers.proxy]
+base_url = "https://proxy.example.com/v1"
+wire_api = "responses"
+`)
+	base := []byte(`model = "agent-model"` + "\n")
+
+	out, err := Codex{}.BuildEffectiveConfig(base, home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var m map[string]any
+	if err := toml.Unmarshal(out, &m); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := m["cli_auth_credentials_store"]; ok {
+		t.Error("cli_auth_credentials_store should be removed")
+	}
+	if _, ok := m["cli_auth_credentials_store_mode"]; ok {
+		t.Error("cli_auth_credentials_store_mode should be removed")
+	}
+	mp := m["model_providers"].(map[string]any)
+	proxy := mp["proxy"].(map[string]any)
+	if proxy["env_key"] != codexInjectedEnvKey {
+		t.Errorf("provider env_key = %v, want %q", proxy["env_key"], codexInjectedEnvKey)
+	}
+	// base_url preserved from home.
+	if proxy["base_url"] != "https://proxy.example.com/v1" {
+		t.Errorf("base_url not preserved: %v", proxy["base_url"])
+	}
+
+	// And auth discovery on the generated config returns the injected env var.
+	authVars, err := Codex{}.AuthEnvVars(out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(authVars) != 1 || authVars[0] != codexInjectedEnvKey {
+		t.Errorf("AuthEnvVars = %v, want [%s]", authVars, codexInjectedEnvKey)
+	}
+}
+
 func TestCodexConfigLayout(t *testing.T) {
 	base, eff := Codex{}.ConfigLayout()
 	if base != "config_base.toml" || eff != "config.toml" {
