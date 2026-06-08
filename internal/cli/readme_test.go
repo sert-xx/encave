@@ -14,7 +14,7 @@ func TestRenderAgentReadmeWithAuthVars(t *testing.T) {
 		"# review-agent",
 		"encave install github.com/dai/review-agent",
 		"encave auth set --global",
-		"`PROXY_TOKEN`",
+		"needs a bearer token",
 		"encave dai/review-agent",
 		"encave run", // interactive picker mention
 		"encave publish dai/review-agent",
@@ -31,13 +31,10 @@ func TestRenderAgentReadmeWithAuthVars(t *testing.T) {
 	}
 }
 
-func TestRenderAgentReadmeNoAuthVars(t *testing.T) {
+func TestRenderAgentReadmeNoCredential(t *testing.T) {
 	out := renderAgentReadme("bob", "plain-agent", "codex", nil, nil, nil)
-	if !strings.Contains(out, "does not declare an environment-based credential") {
+	if !strings.Contains(out, "does not declare a model provider that needs a token") {
 		t.Errorf("expected no-credential note, got:\n%s", out)
-	}
-	if strings.Contains(out, "reads its credential from the following") {
-		t.Errorf("should not list credential vars when none exist:\n%s", out)
 	}
 }
 
@@ -51,11 +48,16 @@ func TestRenderAgentReadmeListsModelProviders(t *testing.T) {
 		"not** bundled",
 		"**proxy**",
 		"base_url `https://proxy.example.com/v1`",
-		"token env var `PROXY_TOKEN`",
+		"wire_api `responses`",
+		"encave wires up the auth token",
 	} {
 		if !strings.Contains(out, s) {
 			t.Errorf("provider README missing %q\n---\n%s", s, out)
 		}
+	}
+	// encave forces its own env var, so the author's env_key is not surfaced.
+	if strings.Contains(out, "PROXY_TOKEN") {
+		t.Errorf("should not surface the author's env_key:\n%s", out)
 	}
 }
 
