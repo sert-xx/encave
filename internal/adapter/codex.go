@@ -1,6 +1,7 @@
 package adapter
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -16,6 +17,123 @@ func init() { register(Codex{}) }
 // These are never packaged — they are symlinked from the user's base home at
 // launch so each user's approvals apply to (and accumulate across) every agent.
 var codexPersonalSubdirs = []string{"rules"}
+
+// Codex config layout: the agent ships a whitelist-filtered config_base.toml
+// (committed); at launch encave merges it over the user's own ~/.codex/config.toml
+// to produce config.toml (gitignored), which is what Codex actually reads. This
+// keeps environment/personal settings (project trust, UI, telemetry, paths) on
+// the user's side while the agent owns its defining keys.
+const (
+	codexBaseConfig      = "config_base.toml"
+	codexEffectiveConfig = "config.toml"
+)
+
+// codexConfigWhitelist is the set of top-level config.toml keys an agent owns and
+// ships. Everything else is treated as environment/personal and comes from the
+// user's home at launch. Derived from the Codex ConfigToml struct
+// (codex-rs/core/src/config/mod.rs); unknown/new keys default to NOT packaged.
+var codexConfigWhitelist = map[string]bool{
+	// Model & provider
+	"model": true, "review_model": true, "model_provider": true,
+	"model_provider_id": true, "model_providers": true,
+	"model_reasoning_effort": true, "plan_mode_reasoning_effort": true,
+	"model_reasoning_summary": true, "model_supports_reasoning_summaries": true,
+	"model_verbosity": true, "model_context_window": true,
+	"model_auto_compact_token_limit": true, "model_auto_compact_token_limit_scope": true,
+	"service_tier": true, "personality": true, "oss_provider": true,
+	"model_catalog_json": true,
+	// Instructions & project docs
+	"base_instructions": true, "developer_instructions": true, "compact_prompt": true,
+	"project_doc_max_bytes": true, "project_doc_fallback_filenames": true,
+	"include_permissions_instructions": true, "include_apps_instructions": true,
+	"include_collaboration_mode_instructions": true, "include_skill_instructions": true,
+	"include_environment_context": true,
+	// Safety posture (author's intended permissions/sandbox)
+	"sandbox_mode": true, "sandbox_workspace_write": true, "default_permissions": true,
+	"permissions": true, "profiles": true, "shell_environment_policy": true,
+	"approval_policy": true, "approvals_reviewer": true,
+	// Orchestration
+	"agents": true, "agent_roles": true, "agent_max_threads": true,
+	"agent_max_depth": true, "agent_job_max_runtime_seconds": true,
+	"agent_interrupt_message_enabled": true, "multi_agent_v2": true,
+	// Tools & capabilities
+	"mcp_servers": true, "tools": true, "code_mode": true,
+	"use_experimental_unified_exec_tool": true, "background_terminal_max_timeout": true,
+	"web_search": true, "web_search_config": true, "features": true,
+	// Project detection
+	"project_root_markers": true,
+}
+
+// ConfigLayout implements Adapter: Codex uses the base/effective split.
+func (Codex) ConfigLayout() (base, effective string) {
+	return codexBaseConfig, codexEffectiveConfig
+}
+
+// BuildBaseConfig implements Adapter: keep only whitelisted top-level keys from a
+// full ~/.codex/config.toml so the packaged config carries just the agent's own
+// settings.
+func (Codex) BuildBaseConfig(full []byte) ([]byte, error) {
+	if len(bytes.TrimSpace(full)) == 0 {
+		return nil, nil
+	}
+	var m map[string]any
+	if err := toml.Unmarshal(full, &m); err != nil {
+		return nil, fmt.Errorf("parsing config: %w", err)
+	}
+	out := make(map[string]any, len(m))
+	for k, v := range m {
+		if codexConfigWhitelist[k] {
+			out[k] = v
+		}
+	}
+	return encodeTOML(out)
+}
+
+// BuildEffectiveConfig implements Adapter: overlay the agent's base config over
+// the user's home config at the top level. The agent's keys win; every other key
+// (project trust, UI, paths, telemetry, …) comes from the user's home.
+func (Codex) BuildEffectiveConfig(base, home []byte) ([]byte, error) {
+	merged := map[string]any{}
+	if len(bytes.TrimSpace(home)) > 0 {
+		if err := toml.Unmarshal(home, &merged); err != nil {
+			return nil, fmt.Errorf("parsing home config: %w", err)
+		}
+	}
+	if len(bytes.TrimSpace(base)) > 0 {
+		var bm map[string]any
+		if err := toml.Unmarshal(base, &bm); err != nil {
+			return nil, fmt.Errorf("parsing base config: %w", err)
+		}
+		for k, v := range bm {
+			merged[k] = v // agent's keys win (full top-level replace)
+		}
+	}
+	return encodeTOML(merged)
+}
+
+// encodeTOML serializes a map to TOML bytes.
+func encodeTOML(m map[string]any) ([]byte, error) {
+	var buf bytes.Buffer
+	if err := toml.NewEncoder(&buf).Encode(m); err != nil {
+		return nil, fmt.Errorf("encoding config: %w", err)
+	}
+	return buf.Bytes(), nil
+}
+
+// readFirst returns the contents of the first path that exists, or (nil, nil) if
+// none do.
+func readFirst(paths ...string) ([]byte, error) {
+	for _, p := range paths {
+		data, err := os.ReadFile(p)
+		if err == nil {
+			return data, nil
+		}
+		if !os.IsNotExist(err) {
+			return nil, fmt.Errorf("reading %s: %w", p, err)
+		}
+	}
+	return nil, nil
+}
 
 // Codex is the adapter for the Codex CLI, encave's first target.
 //
@@ -49,7 +167,8 @@ func (Codex) BaseHome() (string, error) {
 	return filepath.Join(home, ".codex"), nil
 }
 
-// Validate implements Adapter. A Codex home is expected to contain config.toml.
+// Validate implements Adapter. A Codex agent has either the packaged base config
+// (new layout) or a config.toml (legacy / generated effective config).
 func (Codex) Validate(agentDir string) error {
 	info, err := os.Stat(agentDir)
 	if err != nil {
@@ -58,27 +177,33 @@ func (Codex) Validate(agentDir string) error {
 	if !info.IsDir() {
 		return fmt.Errorf("agent home %q is not a directory", agentDir)
 	}
-	cfg := filepath.Join(agentDir, "config.toml")
-	if _, err := os.Stat(cfg); err != nil {
-		return fmt.Errorf("agent home %q has no config.toml (not a valid Codex home?)", agentDir)
+	if _, err := os.Stat(filepath.Join(agentDir, codexBaseConfig)); err == nil {
+		return nil
 	}
-	return nil
+	if _, err := os.Stat(filepath.Join(agentDir, codexEffectiveConfig)); err == nil {
+		return nil
+	}
+	return fmt.Errorf("agent home %q has no %s or %s (not a valid Codex home?)", agentDir, codexBaseConfig, codexEffectiveConfig)
 }
 
-// AuthEnvVars implements Adapter by reading config.toml and collecting every
+// AuthEnvVars implements Adapter by reading the agent config and collecting every
 // env var name referenced by a model provider's env_key or env_http_headers.
+// Provider config is whitelisted, so it lives in the base config; the effective
+// config.toml (legacy or generated) is the fallback.
 func (Codex) AuthEnvVars(agentDir string) ([]string, error) {
-	cfgPath := filepath.Join(agentDir, "config.toml")
-	data, err := os.ReadFile(cfgPath)
+	data, err := readFirst(
+		filepath.Join(agentDir, codexBaseConfig),
+		filepath.Join(agentDir, codexEffectiveConfig),
+	)
 	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, nil
-		}
-		return nil, fmt.Errorf("reading %s: %w", cfgPath, err)
+		return nil, err
+	}
+	if data == nil {
+		return nil, nil
 	}
 	var raw map[string]any
 	if err := toml.Unmarshal(data, &raw); err != nil {
-		return nil, fmt.Errorf("parsing %s: %w", cfgPath, err)
+		return nil, fmt.Errorf("parsing config: %w", err)
 	}
 
 	providers, ok := raw["model_providers"].(map[string]any)
@@ -175,6 +300,10 @@ func (Codex) ScaffoldExcludes() []string {
 		"tmp",
 		".tmp",
 		"version.json",
+		// The effective config.toml is generated at launch (base config + the
+		// user's home config); `new` writes config_base.toml separately, so the
+		// raw config.toml is never copied.
+		"config.toml",
 		// Never copy a stray repo from the base home
 		".git",
 	}
@@ -208,6 +337,8 @@ func (Codex) GitignoreLines() []string {
 		".cache/",
 		"tmp/",
 		"version.json",
+		"# encave: generated at launch (config_base.toml merged with your ~/.codex/config.toml)",
+		"config.toml",
 		"# encave: personal settings — symlinked from your base home at launch",
 	}
 	for _, sub := range codexPersonalSubdirs {

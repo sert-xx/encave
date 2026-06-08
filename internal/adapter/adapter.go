@@ -85,6 +85,22 @@ type Adapter interface {
 	// GitignoreLines returns recommended .gitignore entries for a published
 	// agent of this target.
 	GitignoreLines() []string
+
+	// ConfigLayout reports the committed "base" config filename and the generated
+	// "effective" config filename the target CLI actually reads. Both empty if the
+	// adapter does not split config this way (then `new`/`run` skip config
+	// transformation for it).
+	ConfigLayout() (base string, effective string)
+
+	// BuildBaseConfig filters a full target config (read from the user's home)
+	// down to the keys an agent should own and ship. Used by `new`. Returns
+	// (nil, nil) for empty input.
+	BuildBaseConfig(fullConfig []byte) ([]byte, error)
+
+	// BuildEffectiveConfig merges the committed base config over the user's home
+	// config so the user's environment-specific settings apply while the agent's
+	// keys win. Used by `run`; homeConfig may be empty.
+	BuildEffectiveConfig(baseConfig, homeConfig []byte) ([]byte, error)
 }
 
 // Registry maps adapter names to their implementations.

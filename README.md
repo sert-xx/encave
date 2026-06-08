@@ -236,7 +236,8 @@ encave publish dai/review-agent --tag v1.0.0 --remote git@github.com:dai/review-
 <root>/                          # ~/.encave (override with ENCAVE_ROOT)
 └── <owner>/<repo>/              # one agent = one isolated agent home
     │                            #   (authored via `new` or fetched via `install`)
-    ├── config.toml              # non-secret config (provider, env_key NAME, wire_api)
+    ├── config_base.toml         # agent-owned config (whitelisted keys) — committed
+    ├── config.toml              # generated at launch (base ⊕ your ~/.codex) — gitignored
     ├── .encave.toml             # non-secret agent metadata (target adapter)
     ├── agents/ prompts/ skills/ # orchestration, prompts, skills — vendored, committed
     ├── AGENTS.md                # author instructions — committed
@@ -249,6 +250,25 @@ Only the author's tuned configuration is packaged. Codex's machine-generated
 state — credentials, history, session transcripts, the `state_*.sqlite` /
 `logs_*.sqlite` databases (and their WAL/SHM sidecars), logs, caches and
 `version.json` — is excluded by `new` and gitignored by `publish`.
+
+### config: agent-owned vs. environment
+
+Codex's `config.toml` mixes the agent author's settings (model, providers,
+sandbox/permissions, agents, MCP servers, …) with the executor's own,
+environment-specific state — most importantly `[projects]` trust levels, which
+record absolute local paths Codex auto-appends as you approve projects, plus UI,
+notifications, telemetry and local paths. To keep these on the right side:
+
+- `new` writes **`config_base.toml`** containing only a **whitelist of
+  agent-owned top-level keys**; everything else is left to the user's home.
+- At launch, `run` merges `config_base.toml` over the user's own
+  `~/.codex/config.toml` into the **generated `config.toml`** that Codex reads:
+  the agent's keys win, while project trust, UI and other personal settings come
+  from the user. Because `config.toml` is gitignored, Codex appending new trust
+  at runtime never shows up as a diff.
+
+This means each executor's existing project-trust decisions apply automatically,
+and no author's local paths/trust ship inside an agent.
 
 Credentials live only in the OS keyring under the `encave` service.
 

@@ -85,6 +85,28 @@ func cmdNew(args []string) int {
 		return 1
 	}
 
+	// Write the whitelist-filtered base config. The raw config.toml is excluded
+	// from the copy; the effective config.toml is generated at launch by merging
+	// this base with the user's own home config.
+	configStatus := "n/a"
+	if base, eff := ad.ConfigLayout(); base != "" {
+		full, ferr := os.ReadFile(filepath.Join(src, eff))
+		if ferr != nil && !os.IsNotExist(ferr) {
+			errf("reading source config: %v", ferr)
+			return 1
+		}
+		baseData, berr := ad.BuildBaseConfig(full)
+		if berr != nil {
+			errf("filtering config to a whitelist: %v", berr)
+			return 1
+		}
+		if err := os.WriteFile(filepath.Join(dst, base), baseData, 0o644); err != nil {
+			errf("writing %s: %v", base, err)
+			return 1
+		}
+		configStatus = fmt.Sprintf("%s (agent-owned keys only)", base)
+	}
+
 	// Record which target this agent is for, so publish/run need no extra state.
 	if err := agentmeta.Save(dst, agentmeta.Meta{Target: ad.Name()}); err != nil {
 		errf("writing agent metadata: %v", err)
@@ -113,6 +135,7 @@ func cmdNew(args []string) int {
 	if len(res.Excluded) > 0 {
 		fmt.Printf("  excluded: %d entries (secrets/state/logs filtered)\n", len(res.Excluded))
 	}
+	fmt.Printf("  config:   %s\n", configStatus)
 	fmt.Printf("  README:   %s\n", readmeStatus)
 	if gitStatus != "" {
 		fmt.Printf("  git:      %s\n", gitStatus)

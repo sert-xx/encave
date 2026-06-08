@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"reflect"
 	"testing"
+
+	"github.com/BurntSushi/toml"
 )
 
 const sampleConfig = `
@@ -141,6 +143,81 @@ func TestCodexIgnoresGeneratedState(t *testing.T) {
 		if !contains(c.GitignoreLines(), w) {
 			t.Errorf("GitignoreLines missing %q", w)
 		}
+	}
+}
+
+func TestCodexBuildBaseConfigWhitelist(t *testing.T) {
+	full := []byte(`
+model = "internal-model"
+approval_policy = "on-request"
+
+[model_providers.proxy]
+base_url = "https://proxy.example.com/v1"
+env_key = "PROXY_TOKEN"
+
+[agents]
+max_threads = 4
+
+# environment/personal — must be dropped
+[projects."/home/alice/secret-project"]
+trust_level = "trusted"
+
+[tui]
+theme = "dark"
+`)
+	out, err := Codex{}.BuildBaseConfig(full)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var m map[string]any
+	if err := toml.Unmarshal(out, &m); err != nil {
+		t.Fatal(err)
+	}
+	for _, keep := range []string{"model", "approval_policy", "model_providers", "agents"} {
+		if _, ok := m[keep]; !ok {
+			t.Errorf("whitelisted key %q was dropped", keep)
+		}
+	}
+	for _, drop := range []string{"projects", "tui"} {
+		if _, ok := m[drop]; ok {
+			t.Errorf("non-whitelisted key %q was kept", drop)
+		}
+	}
+}
+
+func TestCodexBuildEffectiveConfigOverlay(t *testing.T) {
+	base := []byte("model = \"agent-model\"\n[model_providers.proxy]\nenv_key = \"PROXY_TOKEN\"\n")
+	home := []byte("model = \"user-model\"\n[projects.\"/home/me/proj\"]\ntrust_level = \"trusted\"\n[tui]\ntheme = \"dark\"\n")
+
+	out, err := Codex{}.BuildEffectiveConfig(base, home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var m map[string]any
+	if err := toml.Unmarshal(out, &m); err != nil {
+		t.Fatal(err)
+	}
+	// Agent's whitelisted key wins.
+	if m["model"] != "agent-model" {
+		t.Errorf("model = %v, want agent-model (agent wins)", m["model"])
+	}
+	// User's environment keys are preserved from home.
+	if _, ok := m["projects"]; !ok {
+		t.Error("user's projects (trust) should come from home config")
+	}
+	if _, ok := m["tui"]; !ok {
+		t.Error("user's tui settings should come from home config")
+	}
+	// Agent's provider config is present.
+	if _, ok := m["model_providers"]; !ok {
+		t.Error("agent's model_providers should be present")
+	}
+}
+
+func TestCodexConfigLayout(t *testing.T) {
+	base, eff := Codex{}.ConfigLayout()
+	if base != "config_base.toml" || eff != "config.toml" {
+		t.Fatalf("layout = (%q, %q)", base, eff)
 	}
 }
 
