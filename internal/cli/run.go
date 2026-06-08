@@ -419,3 +419,16 @@ func applyPersonalLinks(links []personalLink) {
 		}
 	}
 }
+
+// ensurePersonalLinks plans and creates the adapter's personal-subdir symlinks
+// in agentDir, returning the links it created. It is called from new, install
+// and run so the links exist as soon as the agent does — not only at launch —
+// which keeps personal dirs (e.g. rules) visibly symlinked during editing and
+// right after install, avoiding accidental copies. Symlinks use the current
+// machine's absolute home and are gitignored, so they are never committed (a
+// committed symlink can't be portable: ~ and $HOME are not expanded by the OS).
+func ensurePersonalLinks(ad adapter.Adapter, agentDir string) []personalLink {
+	links := personalLinkPlan(ad, agentDir)
+	applyPersonalLinks(links)
+	return links
+}

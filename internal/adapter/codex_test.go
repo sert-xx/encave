@@ -104,8 +104,12 @@ func TestCodexPersonalSubdirsLinkedNotPackaged(t *testing.T) {
 		if !has(c.ScaffoldExcludes(), sub) {
 			t.Errorf("personal subdir %q must be excluded from scaffolding", sub)
 		}
-		if !has(c.GitignoreLines(), sub+"/") {
-			t.Errorf("personal subdir %q must be gitignored (%q)", sub, sub+"/")
+		// No trailing slash, so the symlink encave creates is also ignored.
+		if !has(c.GitignoreLines(), sub) {
+			t.Errorf("personal subdir %q must be gitignored (no trailing slash so the symlink matches)", sub)
+		}
+		if has(c.GitignoreLines(), sub+"/") {
+			t.Errorf("personal subdir %q should be gitignored as %q (no slash), not %q", sub, sub, sub+"/")
 		}
 	}
 	if !has(personal, "rules") {

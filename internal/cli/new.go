@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/sert-xx/encave/internal/adapter"
 	"github.com/sert-xx/encave/internal/agentmeta"
@@ -113,6 +114,18 @@ func cmdNew(args []string) int {
 		return 1
 	}
 
+	// Create the personal-subdir symlinks now (not only at launch) so they're
+	// visible while you edit the agent — avoiding accidental copies of, e.g.,
+	// your rules. They point at this machine's home and are gitignored.
+	linkStatus := "none"
+	if links := ensurePersonalLinks(ad, dst); len(links) > 0 {
+		var parts []string
+		for _, l := range links {
+			parts = append(parts, fmt.Sprintf("%s -> %s", filepath.Base(l.dst), l.src))
+		}
+		linkStatus = strings.Join(parts, ", ")
+	}
+
 	// Generate a README template documenting the encave install/auth/run flow,
 	// unless the user opted out or the copied home already has a README.
 	readmeStatus := "skipped (--no-readme)"
@@ -136,6 +149,7 @@ func cmdNew(args []string) int {
 		fmt.Printf("  excluded: %d entries (secrets/state/logs filtered)\n", len(res.Excluded))
 	}
 	fmt.Printf("  config:   %s\n", configStatus)
+	fmt.Printf("  links:    %s\n", linkStatus)
 	fmt.Printf("  README:   %s\n", readmeStatus)
 	if gitStatus != "" {
 		fmt.Printf("  git:      %s\n", gitStatus)

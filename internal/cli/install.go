@@ -115,6 +115,12 @@ func cmdInstall(args []string) int {
 		target = agentmeta.DefaultTargetOr(dst)
 	}
 
+	// Create the personal-subdir symlinks (e.g. rules) now, so they're effective
+	// immediately after install — not only at first launch.
+	if ad, aerr := adapter.Get(target); aerr == nil {
+		ensurePersonalLinks(ad, dst)
+	}
+
 	fmt.Printf("Installed %s/%s [%s] -> %s (at %s)\n", src.Owner, src.Repo, target, dst, gitutil.CurrentRef(dst))
 	fmt.Println()
 	fmt.Printf("Launch it with:  encave %s/%s\n", src.Owner, src.Repo)
