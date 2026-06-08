@@ -29,17 +29,25 @@ func cmdPublish(args []string) int {
 	fs.BoolVar(yes, "y", false, "shorthand for --yes")
 	noPush := fs.Bool("no-push", false, "commit and tag only; never push")
 	fs.Usage = func() {
-		fmt.Fprintln(os.Stderr, "usage: encave publish <owner>/<repo> [--tag vX.Y.Z] [--message msg] [--remote url] [--no-tag] [--no-push] [-y]")
+		fmt.Fprintln(os.Stderr, "usage: encave publish [<owner>/<repo>] [--tag vX.Y.Z] [--message msg] [--remote url] [--no-tag] [--no-push] [-y]")
+		fmt.Fprintln(os.Stderr, "  On a terminal, missing values (agent, tag, remote) are prompted for.")
 		fs.PrintDefaults()
 	}
-	pos, ok := parseOnePositional(fs, args)
-	if !ok {
+	// The agent reference, when present, is the first token (before any flags);
+	// it is optional so `encave publish` can prompt interactively.
+	var refArg string
+	var flagArgs []string
+	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
+		refArg = args[0]
+		flagArgs = args[1:]
+	} else {
+		flagArgs = args
+	}
+	if err := fs.Parse(flagArgs); err != nil {
 		return 2
 	}
-	ref, err := parseAgentRef(pos)
-	if err != nil {
-		errf("%v", err)
-		fmt.Fprintln(os.Stderr, "  drafts are identified by their GitHub identity, e.g.  encave publish dai/review-agent")
+	if fs.NArg() > 0 {
+		errf("unexpected arguments %v (the agent reference must come first)", fs.Args())
 		return 2
 	}
 
@@ -47,15 +55,51 @@ func cmdPublish(args []string) int {
 		errf("git is required for publish but was not found on PATH")
 		return 1
 	}
-	if *tag == "" && !*noTag {
-		errf("a release tag is required for reproducible installs; pass --tag vX.Y.Z (or --no-tag to skip)")
-		return 2
-	}
 
 	root, ok := mustRoot()
 	if !ok {
 		return 1
 	}
+
+	interactive := isInteractive()
+
+	// Resolve the agent: explicit reference, or interactive selection.
+	var ref AgentRef
+	switch {
+	case refArg != "":
+		r, err := parseAgentRef(refArg)
+		if err != nil {
+			errf("%v", err)
+			fmt.Fprintln(os.Stderr, "  agents are identified by their GitHub identity, e.g.  encave publish dai/review-agent")
+			return 2
+		}
+		ref = r
+	case interactive:
+		r, ok := pickAgentRef(root, "Select an agent to publish:")
+		if !ok {
+			return 1
+		}
+		ref = r
+	default:
+		errf("no agent specified; usage: encave publish <owner>/<repo> [flags]")
+		return 2
+	}
+
+	// Resolve the tag: explicit, opted out, or prompted.
+	if *tag == "" && !*noTag {
+		if interactive {
+			in := promptLine("Release tag (e.g. v1.0.0; blank = no tag)", "")
+			if in == "" {
+				*noTag = true
+			} else {
+				*tag = in
+			}
+		} else {
+			errf("a release tag is required for reproducible installs; pass --tag vX.Y.Z (or --no-tag to skip)")
+			return 2
+		}
+	}
+
 	dir := paths.AgentDir(root, ref.Owner, ref.Repo)
 	if info, err := os.Stat(dir); err != nil || !info.IsDir() {
 		errf("agent %s not found at %s", ref, dir)
@@ -137,12 +181,20 @@ func cmdPublish(args []string) int {
 		fmt.Printf("Tagged:    %s\n", *tag)
 	}
 
-	if *remote != "" && !gitutil.RemoteExists(dir, "origin") {
-		if err := gitutil.AddRemote(dir, "origin", *remote); err != nil {
-			errf("adding remote: %v", err)
-			return 1
+	if !gitutil.RemoteExists(dir, "origin") {
+		url := *remote
+		if url == "" && interactive {
+			if confirm("No git remote is set. Add 'origin' now?") {
+				url = promptLine("Remote URL", fmt.Sprintf("git@github.com:%s.git", ref))
+			}
 		}
-		fmt.Printf("Remote:    origin -> %s\n", *remote)
+		if url != "" {
+			if err := gitutil.AddRemote(dir, "origin", url); err != nil {
+				errf("adding remote: %v", err)
+				return 1
+			}
+			fmt.Printf("Remote:    origin -> %s\n", url)
+		}
 	}
 
 	fmt.Println()

@@ -146,6 +146,47 @@ func pickLaunchTarget(root string) (runSelection, bool) {
 	return runSelection{}, false
 }
 
+// pickAgentRef lists the installed agents and lets the user choose one
+// interactively, returning its reference. Used by commands like `publish` when
+// no agent is given. ok=false when there are no agents or the user cancels.
+func pickAgentRef(root, header string) (AgentRef, bool) {
+	agents := findInstalled(root)
+	if len(agents) == 0 {
+		errf("no agents found in %s", root)
+		fmt.Fprintln(os.Stderr, "  create one first:  encave new <owner>/<repo>")
+		return AgentRef{}, false
+	}
+	fmt.Println(header)
+	for i, a := range agents {
+		fmt.Printf("  %2d) %-30s [%s] %s\n", i+1, a.ref, a.target, a.ref2)
+	}
+	reader := bufio.NewReader(os.Stdin)
+	for attempts := 0; attempts < 3; attempts++ {
+		fmt.Printf("Select [1-%d] (q to cancel): ", len(agents))
+		line, err := reader.ReadString('\n')
+		if err != nil && line == "" {
+			fmt.Println()
+			return AgentRef{}, false
+		}
+		idx, cancel, cerr := parseAgentChoice(line, len(agents))
+		if cancel {
+			return AgentRef{}, false
+		}
+		if cerr != nil {
+			fmt.Fprintf(os.Stderr, "  %v\n", cerr)
+			continue
+		}
+		ref, perr := parseAgentRef(agents[idx].ref)
+		if perr != nil {
+			errf("%v", perr)
+			return AgentRef{}, false
+		}
+		return ref, true
+	}
+	errf("no valid selection made")
+	return AgentRef{}, false
+}
+
 // parseAgentChoice interprets one line of picker input against a list of size n.
 // It returns the selected 0-based index, whether the user asked to cancel
 // (q/quit), or an error describing why the input was not a valid choice.

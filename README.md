@@ -110,7 +110,7 @@ refuses otherwise; pass `--no-verify` to override for a repo you trust.
 
 ```
 encave new <owner>/<repo>      Scaffold a draft agent (secrets filtered; README template generated)
-encave publish <owner>/<repo>  Scan (fail-closed), commit, tag, and (with a remote) push a draft
+encave publish [<owner>/<repo>]  Scan (fail-closed), commit, tag, and (with a remote) push an agent
 encave install <github-url>    Clone+checkout an agent (verifies it's encave-managed)
 encave run [<owner>/<repo>]    Launch an agent ("default" = your own home; omit to pick)
 encave auth set|status|clear   Manage credentials in the OS keyring (values never printed)
@@ -213,6 +213,11 @@ by `publish`, after the secret scan — so nothing unscanned lands in a commit.
 # Create the empty repo on GitHub first, then publish with a remote:
 encave publish dai/review-agent --tag v1.0.0 --remote git@github.com:dai/review-agent.git
 ```
+
+On a terminal you can just run `encave publish` and it prompts for anything
+missing — which agent (chosen from a list), the release tag, and the remote
+(defaulting to `git@github.com:<owner>/<repo>.git`). Off a terminal these must be
+passed as flags.
 
 `encave publish` runs a fail-closed secret scan, commits, and tags. Then:
 
