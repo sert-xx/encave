@@ -116,6 +116,14 @@ func cmdNew(args []string) int {
 		return 1
 	}
 
+	// Set up .gitignore now (appending the adapter's entries to any .gitignore
+	// copied from the user's home, de-duplicated) so generated/runtime files like
+	// config.toml are ignored even before the first publish.
+	if err := ensureGitignore(dst, ad); err != nil {
+		errf("writing .gitignore: %v", err)
+		return 1
+	}
+
 	// Create the personal-subdir symlinks now (not only at launch) so they're
 	// visible while you edit the agent — avoiding accidental copies of, e.g.,
 	// your rules. They point at this machine's home and are gitignored.

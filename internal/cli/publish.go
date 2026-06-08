@@ -266,39 +266,53 @@ func scanStaged(dir string, staged []string) []scan.Finding {
 	return all
 }
 
-// ensureGitignore creates or augments .gitignore with the adapter's recommended
-// entries, preserving any lines already present.
+// ensureGitignore creates or updates .gitignore, appending the adapter's
+// recommended entries to whatever is already there (e.g. a .gitignore copied
+// from the user's home). Existing content is preserved and ordered first; the
+// adapter's lines follow. Duplicate non-blank lines are removed (first
+// occurrence wins) and consecutive blank lines are collapsed, so re-running is
+// idempotent.
 func ensureGitignore(dir string, ad adapter.Adapter) error {
 	path := filepath.Join(dir, ".gitignore")
-	existing := map[string]bool{}
-	var lines []string
+	var existing []string
 	if data, err := os.ReadFile(path); err == nil {
-		for _, l := range strings.Split(string(data), "\n") {
-			lines = append(lines, l)
-			existing[strings.TrimSpace(l)] = true
-		}
+		existing = strings.Split(strings.TrimRight(string(data), "\n"), "\n")
 	} else if !os.IsNotExist(err) {
 		return err
 	}
 
-	var added []string
-	for _, l := range ad.GitignoreLines() {
-		if !existing[strings.TrimSpace(l)] {
-			added = append(added, l)
+	var out []string
+	seen := map[string]bool{}
+	add := func(raw string) {
+		t := strings.TrimSpace(raw)
+		if t == "" {
+			// Keep a single blank separator; drop leading/duplicate blanks.
+			if len(out) == 0 || strings.TrimSpace(out[len(out)-1]) == "" {
+				return
+			}
+			out = append(out, "")
+			return
 		}
+		if seen[t] {
+			return
+		}
+		seen[t] = true
+		out = append(out, raw)
 	}
-	if len(added) == 0 {
-		return nil
+
+	for _, l := range existing {
+		add(l)
 	}
-	if len(lines) > 0 && strings.TrimSpace(lines[len(lines)-1]) != "" {
-		lines = append(lines, "")
+	add("") // blank separator before the encave block (no-op if not needed)
+	for _, l := range ad.GitignoreLines() {
+		add(l)
 	}
-	lines = append(lines, added...)
-	out := strings.Join(lines, "\n")
-	if !strings.HasSuffix(out, "\n") {
-		out += "\n"
+	// Trim trailing blank lines.
+	for len(out) > 0 && strings.TrimSpace(out[len(out)-1]) == "" {
+		out = out[:len(out)-1]
 	}
-	return os.WriteFile(path, []byte(out), 0o644)
+
+	return os.WriteFile(path, []byte(strings.Join(out, "\n")+"\n"), 0o644)
 }
 
 // printFindings prints up to max findings to stdout.
