@@ -86,26 +86,28 @@ func cmdPublish(args []string) int {
 		return 2
 	}
 
-	// Resolve the tag: explicit, opted out, or prompted.
+	dir := paths.AgentDir(root, ref.Owner, ref.Repo)
+	if info, err := os.Stat(dir); err != nil || !info.IsDir() {
+		errf("agent %s not found at %s", ref, dir)
+		fmt.Fprintf(os.Stderr, "  create it first:  encave new %s\n", ref)
+		return 1
+	}
+
+	// Resolve the tag: explicit, opted out, or prompted (defaulting to the next
+	// patch version after the highest existing tag).
 	if *tag == "" && !*noTag {
 		if interactive {
-			in := promptLine("Release tag (e.g. v1.0.0; blank = no tag)", "")
-			if in == "" {
+			in := promptLine("Release tag (or 'none' to skip tagging)", gitutil.NextPatchTag(dir))
+			switch in {
+			case "none", "-", "":
 				*noTag = true
-			} else {
+			default:
 				*tag = in
 			}
 		} else {
 			errf("a release tag is required for reproducible installs; pass --tag vX.Y.Z (or --no-tag to skip)")
 			return 2
 		}
-	}
-
-	dir := paths.AgentDir(root, ref.Owner, ref.Repo)
-	if info, err := os.Stat(dir); err != nil || !info.IsDir() {
-		errf("agent %s not found at %s", ref, dir)
-		fmt.Fprintf(os.Stderr, "  create it first:  encave new %s\n", ref)
-		return 1
 	}
 
 	// Select the adapter from the draft's metadata so .gitignore matches the

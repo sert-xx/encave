@@ -6,6 +6,23 @@ import (
 	"testing"
 )
 
+func TestNextPatch(t *testing.T) {
+	cases := map[string]string{
+		"":           "v0.1.0",
+		"v0.1.0":     "v0.1.1",
+		"v1.2.3":     "v1.2.4",
+		"v2.0.9":     "v2.0.10",
+		"v1.2.3-rc1": "v1.2.4", // prerelease stripped
+		"not-a-tag":  "v0.1.0",
+		"1.2.3":      "v0.1.0", // missing leading v -> not semver here
+	}
+	for in, want := range cases {
+		if got := nextPatch(in); got != want {
+			t.Errorf("nextPatch(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
 func TestHasCommits(t *testing.T) {
 	if !Available() {
 		t.Skip("git not available")
