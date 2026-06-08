@@ -9,18 +9,52 @@ import (
 	"time"
 )
 
-// encodeDottedTOML serializes a TOML document (decoded into map[string]any) using
-// TOML 1.0.0 dotted keys instead of nested [table] headers, so the output stays
-// flat with no indentation. Nested tables become dotted key paths
-// (a.b.c = value); arrays and array-of-table elements use inline syntax.
+// encodeOneLevelTOML serializes a TOML document (decoded into map[string]any)
+// keeping at most one level of [table] header: each top-level table becomes a
+// single `[section]`, and everything inside a section (including deeper nesting)
+// uses TOML 1.0.0 dotted keys, so the output never indents. Root-level scalars
+// and arrays are emitted first, then one block per top-level table.
 //
-// Keys under a common ancestor are emitted contiguously (depth-first over sorted
-// keys) so the result is valid TOML (a dotted-key table is never reopened).
-func encodeDottedTOML(m map[string]any) ([]byte, error) {
+// Example:
+//
+//	model = "m"
+//
+//	[model_providers]
+//	proxy.base_url = "https://…"
+//	proxy.env_key = "PROXY_TOKEN"
+func encodeOneLevelTOML(m map[string]any) ([]byte, error) {
 	var b strings.Builder
-	if err := writeDotted(&b, nil, m); err != nil {
-		return nil, err
+
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
 	}
+	sort.Strings(keys)
+
+	// 1) Root-level non-table values (scalars, arrays, empty/inline tables).
+	for _, k := range keys {
+		if sub, ok := asStringMap(m[k]); ok && len(sub) > 0 {
+			continue // non-empty tables become [section] blocks below
+		}
+		val, err := encodeTOMLValue(m[k])
+		if err != nil {
+			return nil, fmt.Errorf("encoding %s: %w", k, err)
+		}
+		b.WriteString(dottedKey([]string{k}) + " = " + val + "\n")
+	}
+
+	// 2) One [section] block per top-level table; contents use dotted keys.
+	for _, k := range keys {
+		sub, ok := asStringMap(m[k])
+		if !ok || len(sub) == 0 {
+			continue
+		}
+		b.WriteString("\n[" + dottedKey([]string{k}) + "]\n")
+		if err := writeDotted(&b, nil, sub); err != nil {
+			return nil, err
+		}
+	}
+
 	return []byte(b.String()), nil
 }
 
