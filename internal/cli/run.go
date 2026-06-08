@@ -243,11 +243,29 @@ func launchAgent(root string, ref AgentRef, agentArgs []string, model, sandbox s
 	// user's base home so the user's own settings apply to this isolated agent.
 	links := personalLinkPlan(ad, agentDir)
 
+	// Generate the effective config the target CLI reads, by merging the agent's
+	// committed base config with the user's own home config (environment/personal
+	// keys come from the user; the agent's keys win).
+	cfgPath, cfgData, cfgApplicable, cerr := buildEffectiveConfig(ad, agentDir)
+	if cerr != nil {
+		errf("preparing effective config: %v", cerr)
+		return 1
+	}
+
 	if dryRun {
 		printDryRun(ref, ad, agentDir, spec, authVars, secretScope, env, links)
+		if cfgApplicable {
+			fmt.Printf("config:   would generate %s (agent base merged with your home config)\n", cfgPath)
+		}
 		return 0
 	}
 
+	if cfgApplicable {
+		if err := os.WriteFile(cfgPath, cfgData, 0o644); err != nil {
+			errf("writing effective config: %v", err)
+			return 1
+		}
+	}
 	applyPersonalLinks(links)
 
 	binPath, err := exec.LookPath(spec.Bin)
@@ -324,6 +342,36 @@ func printDryRun(ref AgentRef, ad adapter.Adapter, agentDir string, spec adapter
 			fmt.Printf("  %s=%s\n", k, v)
 		}
 	}
+}
+
+// buildEffectiveConfig computes the effective config the target CLI reads, by
+// merging the agent's committed base config with the user's home config. It
+// returns the destination path and bytes to write, applicable=false when the
+// adapter has no base/effective split or the agent has no base config (e.g. a
+// legacy agent that committed config.toml directly).
+func buildEffectiveConfig(ad adapter.Adapter, agentDir string) (dst string, data []byte, applicable bool, err error) {
+	base, eff := ad.ConfigLayout()
+	if base == "" {
+		return "", nil, false, nil
+	}
+	baseData, berr := os.ReadFile(filepath.Join(agentDir, base))
+	if berr != nil {
+		if os.IsNotExist(berr) {
+			return "", nil, false, nil // legacy agent without a base config
+		}
+		return "", nil, false, berr
+	}
+	var homeData []byte
+	if home, herr := ad.BaseHome(); herr == nil {
+		if hd, rerr := os.ReadFile(filepath.Join(home, eff)); rerr == nil {
+			homeData = hd
+		}
+	}
+	merged, merr := ad.BuildEffectiveConfig(baseData, homeData)
+	if merr != nil {
+		return "", nil, false, merr
+	}
+	return filepath.Join(agentDir, eff), merged, true, nil
 }
 
 // personalLink is a planned symlink from a user's base-home personal subdir
