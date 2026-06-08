@@ -62,7 +62,7 @@ environment for one launched child process, for that process's lifetime.
 go install github.com/sert-xx/encave@latest
 
 # …or pin a specific version
-go install github.com/sert-xx/encave@v0.4.0
+go install github.com/sert-xx/encave@v0.5.8
 ```
 
 `go install` places the `encave` binary in `$(go env GOBIN)`, falling back to
