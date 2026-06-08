@@ -8,7 +8,7 @@ import (
 	"github.com/BurntSushi/toml"
 )
 
-func TestEncodeOneLevelTables(t *testing.T) {
+func TestEncodeSectionedTables(t *testing.T) {
 	in := []byte(`
 model = "internal-model"
 
@@ -35,26 +35,30 @@ env_key = "PROXY_TOKEN"
 			t.Errorf("line is indented: %q\n---\n%s", line, s)
 		}
 	}
-	// Exactly one level of table header: [model_providers] is allowed; the
-	// deeper [model_providers.proxy] / .env_http_headers headers are not.
-	if !strings.Contains(s, "[model_providers]\n") {
-		t.Errorf("expected a [model_providers] header:\n%s", s)
+	// Section names are dotted; keys inside are plain (not dotted).
+	if !strings.Contains(s, "[model_providers.proxy]\n") {
+		t.Errorf("expected dotted section header [model_providers.proxy]:\n%s", s)
 	}
-	if strings.Contains(s, "[model_providers.proxy]") || strings.Contains(s, "env_http_headers]") {
-		t.Errorf("expected no second-level table headers:\n%s", s)
+	if !strings.Contains(s, "[model_providers.proxy.env_http_headers]\n") {
+		t.Errorf("expected dotted section header for env_http_headers:\n%s", s)
 	}
-	// Inside the section, deeper nesting uses dotted keys.
-	if !strings.Contains(s, "proxy.base_url = ") {
-		t.Errorf("expected dotted key proxy.base_url inside section:\n%s", s)
+	if !strings.Contains(s, "\nbase_url = \"https://proxy.example.com/v1\"\n") {
+		t.Errorf("expected plain key base_url inside section:\n%s", s)
 	}
-	if !strings.Contains(s, `proxy.env_http_headers.X-Api-Key = "PROXY_API_KEY"`) {
-		t.Errorf("expected dotted deep key inside section:\n%s", s)
+	if !strings.Contains(s, "\nX-Api-Key = \"PROXY_API_KEY\"\n") {
+		t.Errorf("expected plain key X-Api-Key inside section:\n%s", s)
+	}
+	// No dotted keys inside sections, and no redundant lone parent header.
+	if strings.Contains(s, "proxy.base_url") {
+		t.Errorf("keys inside a section must not be dotted:\n%s", s)
+	}
+	if strings.Contains(s, "[model_providers]\n") {
+		t.Errorf("the redundant lone parent header should be omitted:\n%s", s)
 	}
 }
 
-func TestEncodeOneLevelQuotesKeysNeedingIt(t *testing.T) {
-	// A key segment containing a dot must be quoted (e.g. a projects path),
-	// inside the single [projects] section.
+func TestEncodeSectionedQuotesKeysNeedingIt(t *testing.T) {
+	// A section-name segment containing a dot must be quoted (e.g. a projects path).
 	m := map[string]any{
 		"projects": map[string]any{
 			"/home/me/proj.v2": map[string]any{"trust_level": "trusted"},
@@ -65,11 +69,11 @@ func TestEncodeOneLevelQuotesKeysNeedingIt(t *testing.T) {
 		t.Fatal(err)
 	}
 	s := string(out)
-	if !strings.Contains(s, "[projects]\n") {
-		t.Errorf("expected [projects] section:\n%s", s)
+	if !strings.Contains(s, `[projects."/home/me/proj.v2"]`) {
+		t.Errorf("expected quoted path segment in section header:\n%s", s)
 	}
-	if !strings.Contains(s, `"/home/me/proj.v2".trust_level = "trusted"`) {
-		t.Errorf("expected quoted path segment inside section:\n%s", s)
+	if !strings.Contains(s, "\ntrust_level = \"trusted\"\n") {
+		t.Errorf("expected plain key inside section:\n%s", s)
 	}
 	var back map[string]any
 	if err := toml.Unmarshal(out, &back); err != nil || !reflect.DeepEqual(m, back) {
@@ -77,7 +81,7 @@ func TestEncodeOneLevelQuotesKeysNeedingIt(t *testing.T) {
 	}
 }
 
-func TestEncodeDottedRoundTrip(t *testing.T) {
+func TestEncodeSectionedRoundTrip(t *testing.T) {
 	in := []byte(`
 model = "m"
 project_root_markers = [".git", "go.mod"]
@@ -104,7 +108,7 @@ inherit = "core"
 	}
 	var back map[string]any
 	if err := toml.Unmarshal(out, &back); err != nil {
-		t.Fatalf("re-parsing dotted output failed: %v\n%s", err, out)
+		t.Fatalf("re-parsing output failed: %v\n%s", err, out)
 	}
 	if !reflect.DeepEqual(m, back) {
 		t.Errorf("round-trip mismatch\n in:  %#v\n out: %#v\n---\n%s", m, back, out)

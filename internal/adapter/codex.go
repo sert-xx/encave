@@ -112,12 +112,12 @@ func (Codex) BuildEffectiveConfig(base, home []byte) ([]byte, error) {
 	return encodeTOML(merged)
 }
 
-// encodeTOML serializes a map to TOML bytes keeping at most one level of [table]
-// header, with dotted keys inside (no indentation). It verifies the output
+// encodeTOML serializes a map to TOML bytes using [table] headers with dotted
+// section names and plain keys inside (no indentation). It verifies the output
 // round-trips back to the same data; if anything is off, it falls back to the
 // standard encoder without indentation, so output is always valid.
 func encodeTOML(m map[string]any) ([]byte, error) {
-	if out, err := encodeOneLevelTOML(m); err == nil {
+	if out, err := encodeSectionedTOML(m); err == nil {
 		var back map[string]any
 		if err := toml.Unmarshal(out, &back); err == nil && reflect.DeepEqual(m, back) {
 			return out, nil
