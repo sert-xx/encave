@@ -112,6 +112,7 @@ refuses otherwise; pass `--no-verify` to override for a repo you trust.
 encave new <owner>/<repo>      Scaffold a draft agent (secrets filtered; README template generated)
 encave publish [<owner>/<repo>]  Scan (fail-closed), commit, tag, and (with a remote) push an agent
 encave install <github-url>    Clone+checkout an agent (verifies it's encave-managed)
+encave update [<owner>/<repo>] Update an agent to a tag (default: latest); --all for every agent
 encave run [<owner>/<repo>]    Launch an agent ("default" = your own home; omit to pick)
 encave auth set|status|clear   Manage credentials in the OS keyring (values never printed)
 encave list                    List installed agents and local drafts
@@ -145,6 +146,15 @@ command (credentials redacted) without launching:
 
 ```sh
 encave dai/review-agent --dry-run -- exec "review this diff"
+```
+
+Keep agents current with `update` (fetches the agent's origin and checks out the
+tag):
+
+```sh
+encave update dai/review-agent              # latest release tag
+encave update dai/review-agent --tag v1.2.0 # a specific tag
+encave update --all                         # every installed agent to its latest
 ```
 
 ### Launching your own (non-encave) home
