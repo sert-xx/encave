@@ -9,79 +9,77 @@ import (
 	"time"
 )
 
-// encodeOneLevelTOML serializes a TOML document (decoded into map[string]any)
-// keeping at most one level of [table] header: each top-level table becomes a
-// single `[section]`, and everything inside a section (including deeper nesting)
-// uses TOML 1.0.0 dotted keys, so the output never indents. Root-level scalars
-// and arrays are emitted first, then one block per top-level table.
+// encodeSectionedTOML serializes a TOML document (decoded into map[string]any)
+// using standard [table] headers whose names are the dotted path, with plain
+// (non-dotted) keys inside each section and no indentation. Intermediate tables
+// that contain only sub-tables are collapsed into the dotted header (so a lone
+// parent like [model_providers] is not emitted when only [model_providers.proxy]
+// has content).
 //
 // Example:
 //
 //	model = "m"
 //
-//	[model_providers]
-//	proxy.base_url = "https://…"
-//	proxy.env_key = "PROXY_TOKEN"
-func encodeOneLevelTOML(m map[string]any) ([]byte, error) {
+//	[model_providers.proxy]
+//	base_url = "https://…"
+//	env_key = "PROXY_TOKEN"
+//
+//	[model_providers.proxy.env_http_headers]
+//	X-Api-Key = "…"
+func encodeSectionedTOML(m map[string]any) ([]byte, error) {
 	var b strings.Builder
-
-	keys := make([]string, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
+	if err := emitTable(&b, nil, m, true); err != nil {
+		return nil, err
 	}
-	sort.Strings(keys)
-
-	// 1) Root-level non-table values (scalars, arrays, empty/inline tables).
-	for _, k := range keys {
-		if sub, ok := asStringMap(m[k]); ok && len(sub) > 0 {
-			continue // non-empty tables become [section] blocks below
-		}
-		val, err := encodeTOMLValue(m[k])
-		if err != nil {
-			return nil, fmt.Errorf("encoding %s: %w", k, err)
-		}
-		b.WriteString(dottedKey([]string{k}) + " = " + val + "\n")
-	}
-
-	// 2) One [section] block per top-level table; contents use dotted keys.
-	for _, k := range keys {
-		sub, ok := asStringMap(m[k])
-		if !ok || len(sub) == 0 {
-			continue
-		}
-		b.WriteString("\n[" + dottedKey([]string{k}) + "]\n")
-		if err := writeDotted(&b, nil, sub); err != nil {
-			return nil, err
-		}
-	}
-
 	return []byte(b.String()), nil
 }
 
-func writeDotted(b *strings.Builder, prefix []string, m map[string]any) error {
-	keys := make([]string, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
+// emitTable writes one table: its leaf key/value pairs under a [path] header
+// (omitted for the root), then recurses into child tables as their own sections.
+// A "leaf" is any value that is not a non-empty table (scalars, arrays, and
+// empty inline tables); a "sub-table" is a non-empty map, which becomes a deeper
+// [path.child] section.
+func emitTable(b *strings.Builder, path []string, m map[string]any, isRoot bool) error {
+	var leaves, subs []string
+	for k, v := range m {
+		if sm, ok := asStringMap(v); ok && len(sm) > 0 {
+			subs = append(subs, k)
+		} else {
+			leaves = append(leaves, k)
+		}
 	}
-	sort.Strings(keys)
-	for _, k := range keys {
-		path := append(append([]string{}, prefix...), k)
-		v := m[k]
-		if sub, ok := asStringMap(v); ok {
-			if len(sub) == 0 {
-				b.WriteString(dottedKey(path) + " = {}\n")
-				continue
-			}
-			if err := writeDotted(b, path, sub); err != nil {
-				return err
-			}
-			continue
+	sort.Strings(leaves)
+	sort.Strings(subs)
+
+	// Emit this table's own header — but skip it for the root, and for an
+	// intermediate table that has only sub-tables (no leaves): that header is
+	// redundant because its children carry the full dotted path. An explicitly
+	// empty table (no leaves, no subs) still needs a header to exist.
+	if !isRoot && (len(leaves) > 0 || len(subs) == 0) {
+		if b.Len() > 0 {
+			b.WriteByte('\n')
 		}
-		val, err := encodeTOMLValue(v)
+		b.WriteString("[" + dottedKey(path) + "]\n")
+	}
+
+	for _, k := range leaves {
+		val, err := encodeTOMLValue(m[k])
 		if err != nil {
-			return fmt.Errorf("encoding %s: %w", strings.Join(path, "."), err)
+			return fmt.Errorf("encoding %s: %w", strings.Join(append(path, k), "."), err)
 		}
-		b.WriteString(dottedKey(path) + " = " + val + "\n")
+		keyRepr := k
+		if !isBareKey(k) {
+			keyRepr = quoteBasic(k)
+		}
+		b.WriteString(keyRepr + " = " + val + "\n")
+	}
+
+	for _, k := range subs {
+		sm, _ := asStringMap(m[k])
+		child := append(append([]string{}, path...), k)
+		if err := emitTable(b, child, sm, false); err != nil {
+			return err
+		}
 	}
 	return nil
 }
