@@ -343,3 +343,14 @@ Credentials live only in the OS keyring under the `encave` service.
 v1: Codex CLI, single custom provider with a static/long-lived credential (e.g.
 a 30-day PAT) injected at launch. Planned next: generic Codex auth (ChatGPT
 login / API key), a Claude Code adapter, and per-agent multiple credentials.
+
+## Contributing & security
+
+Bug reports and feature requests are welcome via
+[issues](https://github.com/sert-xx/encave/issues). For a security
+vulnerability, please use private reporting instead of a public issue — see
+[SECURITY.md](SECURITY.md).
+
+## License
+
+Released under the [MIT License](LICENSE).
