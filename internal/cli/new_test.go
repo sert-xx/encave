@@ -29,7 +29,7 @@ func TestMaybeWriteReadmeOverwrites(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	status := maybeWriteReadme(dst, AgentRef{Owner: "dai", Repo: "review-agent"}, ad)
+	status := maybeWriteReadme(dst, AgentRef{Owner: "dai", Repo: "review-agent"}, ad, nil)
 	if !strings.Contains(status, "replaced") {
 		t.Errorf("status should note replacement, got %q", status)
 	}

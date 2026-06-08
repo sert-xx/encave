@@ -101,6 +101,21 @@ type Adapter interface {
 	// config so the user's environment-specific settings apply while the agent's
 	// keys win. Used by `run`; homeConfig may be empty.
 	BuildEffectiveConfig(baseConfig, homeConfig []byte) ([]byte, error)
+
+	// MCPServers parses a full target config and returns the MCP servers it
+	// declares. These are not packaged (reusing someone else's MCP server config
+	// is risky), so `new` lists them in the generated README as setup
+	// requirements for the user's own home config. Returns nil if none / N/A.
+	MCPServers(configData []byte) ([]MCPServerInfo, error)
+}
+
+// MCPServerInfo describes an MCP server an agent's source config referenced, for
+// documenting install requirements in the generated README.
+type MCPServerInfo struct {
+	Name    string   // server id/name
+	Command string   // launch command (local servers)
+	Args    []string // launch command arguments
+	URL     string   // endpoint (remote/HTTP servers)
 }
 
 // Registry maps adapter names to their implementations.

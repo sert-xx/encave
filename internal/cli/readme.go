@@ -3,17 +3,20 @@ package cli
 import (
 	"fmt"
 	"strings"
+
+	"github.com/sert-xx/encave/internal/adapter"
 )
 
 // renderAgentReadme produces a README.md tailored to a freshly scaffolded agent.
 // It documents the encave consumer workflow (install / auth / run) using the
-// agent's GitHub identity and discovered auth environment variables, and leaves
-// clearly marked TODOs for the maintainer to describe what the agent does.
+// agent's GitHub identity and discovered auth environment variables, lists the
+// MCP servers the agent expects (which are not bundled), and leaves clearly
+// marked TODOs for the maintainer to describe what the agent does.
 //
 // owner/repo are the agent's GitHub identity; target is the adapter name (e.g.
-// "codex"); authVars are the environment variable names the agent's config
-// expects its credential in (may be empty).
-func renderAgentReadme(owner, repo, target string, authVars []string) string {
+// "codex"); authVars are the credential env var names; mcps are the MCP servers
+// the source config referenced (may be empty).
+func renderAgentReadme(owner, repo, target string, authVars []string, mcps []adapter.MCPServerInfo) string {
 	ref := owner + "/" + repo
 	var b strings.Builder
 
@@ -62,6 +65,29 @@ func renderAgentReadme(owner, repo, target string, authVars []string) string {
 	} else {
 		b.WriteString("This agent does not declare an environment-based credential in its config.\n")
 		b.WriteString("If it needs one, document it here and store it with `encave auth set`.\n\n")
+	}
+
+	// Required MCP servers (not bundled — must be configured in the user's home)
+	if len(mcps) > 0 {
+		b.WriteString("## Required MCP servers\n\n")
+		b.WriteString("This agent expects the following MCP servers. They are **not** bundled (reusing\n")
+		b.WriteString("another person's MCP config is risky), so install and configure them in your\n")
+		b.WriteString("own `~/.codex/config.toml` before use:\n\n")
+		for _, m := range mcps {
+			switch {
+			case m.URL != "":
+				fmt.Fprintf(&b, "- **%s** (remote) — `%s`\n", m.Name, m.URL)
+			case m.Command != "":
+				cmd := m.Command
+				if len(m.Args) > 0 {
+					cmd += " " + strings.Join(m.Args, " ")
+				}
+				fmt.Fprintf(&b, "- **%s** — `%s`\n", m.Name, cmd)
+			default:
+				fmt.Fprintf(&b, "- **%s**\n", m.Name)
+			}
+		}
+		b.WriteString("\n> **TODO:** Add install/setup notes for each server (package, auth, env).\n\n")
 	}
 
 	// Run

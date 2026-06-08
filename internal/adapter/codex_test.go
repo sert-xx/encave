@@ -162,6 +162,11 @@ env_key = "PROXY_TOKEN"
 [agents]
 max_threads = 4
 
+# not whitelisted — must be dropped (reusing others' MCP config is risky)
+[mcp_servers.github]
+command = "npx"
+args = ["-y", "@modelcontextprotocol/server-github"]
+
 # environment/personal — must be dropped
 [projects."/home/alice/secret-project"]
 trust_level = "trusted"
@@ -182,10 +187,41 @@ theme = "dark"
 			t.Errorf("whitelisted key %q was dropped", keep)
 		}
 	}
-	for _, drop := range []string{"projects", "tui"} {
+	for _, drop := range []string{"projects", "tui", "mcp_servers"} {
 		if _, ok := m[drop]; ok {
 			t.Errorf("non-whitelisted key %q was kept", drop)
 		}
+	}
+}
+
+func TestCodexMCPServers(t *testing.T) {
+	full := []byte(`
+[mcp_servers.github]
+command = "npx"
+args = ["-y", "@modelcontextprotocol/server-github"]
+
+[mcp_servers.linear]
+url = "https://mcp.linear.app/sse"
+`)
+	got, err := Codex{}.MCPServers(full)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("got %d servers, want 2: %+v", len(got), got)
+	}
+	// sorted by name: github, linear
+	if got[0].Name != "github" || got[0].Command != "npx" ||
+		len(got[0].Args) != 2 || got[0].Args[0] != "-y" {
+		t.Errorf("github server parsed wrong: %+v", got[0])
+	}
+	if got[1].Name != "linear" || got[1].URL != "https://mcp.linear.app/sse" {
+		t.Errorf("linear server parsed wrong: %+v", got[1])
+	}
+
+	none, _ := Codex{}.MCPServers([]byte("model = \"x\"\n"))
+	if none != nil {
+		t.Errorf("expected nil for config without mcp_servers, got %+v", none)
 	}
 }
 
