@@ -11,6 +11,8 @@ import (
 	"os/exec"
 	"sort"
 	"strings"
+
+	"github.com/sert-xx/encave/internal/semver"
 )
 
 // Run executes git in dir with the given args, returning trimmed stdout. On
@@ -237,30 +239,14 @@ func CurrentBranch(dir string) string {
 }
 
 // parseSemver parses "vX.Y.Z" into [3]int, returning nil if it doesn't match.
+// It delegates to the shared semver package so tags and encave's own version use
+// identical rules.
 func parseSemver(t string) []int {
-	if !strings.HasPrefix(t, "v") {
+	v, ok := semver.Parse(t)
+	if !ok {
 		return nil
 	}
-	core := strings.SplitN(strings.TrimPrefix(t, "v"), "-", 2)[0]
-	parts := strings.Split(core, ".")
-	if len(parts) != 3 {
-		return nil
-	}
-	nums := make([]int, 3)
-	for i, p := range parts {
-		n := 0
-		if p == "" {
-			return nil
-		}
-		for _, c := range p {
-			if c < '0' || c > '9' {
-				return nil
-			}
-			n = n*10 + int(c-'0')
-		}
-		nums[i] = n
-	}
-	return nums
+	return v[:]
 }
 
 func lessSemver(a, b []int) bool {

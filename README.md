@@ -90,6 +90,24 @@ make test       # run the test suite
 encave version
 ```
 
+### Staying up to date
+
+encave keeps itself and your agents current with light-touch prompts — never a
+silent background install:
+
+- **encave itself:** when you run a command and a newer encave release exists,
+  encave offers to install that exact version with `go install` (the resolved
+  tag, never `@latest`). The freshly installed binary applies to your next
+  invocation.
+- **agents:** see [Using a shared agent](#using-a-shared-agent) — `encave run`
+  offers to update an agent when its origin has a newer release tag.
+
+Checks are best-effort and quiet: they run at most once per day per target, only
+when attached to a terminal, and a release version (not a `make build` dev
+binary) is required for the self-check. They never block, and any network or
+proxy error is silently skipped. The encave check honors your `GOPROXY`. Set
+`ENCAVE_NO_UPDATE_CHECK=1` to turn all of this off.
+
 ## Quick start (using a shared agent)
 
 ```sh
@@ -159,6 +177,10 @@ encave update dai/review-agent              # latest release tag
 encave update dai/review-agent --tag v1.2.0 # a specific tag
 encave update --all                         # every installed agent to its latest
 ```
+
+You usually don't have to remember to: when you `encave run` an agent and a newer
+release tag exists on its origin, encave offers to update it first (accept and it
+runs `update` for you, decline and it launches the version you have).
 
 Remove an agent you no longer want (deletes its directory; confirms first, or
 pass `--force`):
@@ -336,6 +358,10 @@ Credentials live only in the OS keyring under the `encave` service.
 - `internal/scan` — the fail-closed secret scanner used by `publish`.
 - `internal/fsutil` — recursive copy with exclusions, used by `new`.
 - `internal/gitutil` — thin wrappers over the `git` CLI.
+- `internal/semver` — parse/compare `vX.Y.Z` versions (release tags and encave's
+  own version).
+- `internal/modproxy` — best-effort lookup of encave's latest version from the Go
+  module proxy, for the self-update check.
 - `internal/cli` — command dispatch (including the implicit `run`) and handlers.
 
 ## Status
