@@ -70,6 +70,13 @@ func Main(args []string) int {
 		return cmdVersion(nil)
 	}
 
+	// Offer to self-update before doing real work. Skipped for the trivial
+	// version/help commands, and a no-op unless an interactive upgrade is actually
+	// available (see maybeOfferSelfUpdate).
+	if args[0] != "version" && args[0] != "help" {
+		maybeOfferSelfUpdate()
+	}
+
 	if fn, ok := knownCommands[args[0]]; ok {
 		return fn(args[1:])
 	}
@@ -111,6 +118,7 @@ Run "encave <command> -h" for command-specific options.
 
 ENVIRONMENT:
   ENCAVE_ROOT             Override the root directory (default: ~/.encave)
+  ENCAVE_NO_UPDATE_CHECK  Set to disable update checks for encave and agents
 `)
 	return
 }

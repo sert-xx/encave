@@ -175,6 +175,12 @@ func launchAgent(root string, ref AgentRef, agentArgs []string, model, sandbox s
 		return 1
 	}
 
+	// Offer to update to a newer release before launching. A no-op for dry runs
+	// and unless an interactive upgrade is actually available.
+	if !dryRun {
+		maybeOfferAgentUpdate(root, ref, agentDir)
+	}
+
 	// Select the adapter from agent metadata (default target if absent).
 	targetName := adapter.DefaultName
 	if m, merr := agentmeta.Load(agentDir); merr == nil && m != nil && m.Target != "" {
