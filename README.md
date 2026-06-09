@@ -62,7 +62,7 @@ environment for one launched child process, for that process's lifetime.
 ```sh
 # install a specific release — use the newest tag from the Releases page:
 # https://github.com/sert-xx/encave/releases
-go install github.com/sert-xx/encave@v0.7.0
+go install github.com/sert-xx/encave@v0.8.0
 ```
 
 > Prefer the latest release tag over `@latest`: the module proxy's `@latest`
