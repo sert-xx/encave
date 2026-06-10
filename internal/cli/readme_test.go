@@ -8,7 +8,7 @@ import (
 )
 
 func TestRenderAgentReadmeWithAuthVars(t *testing.T) {
-	out := renderAgentReadme("dai", "review-agent", "codex", []string{"PROXY_TOKEN"}, nil, nil)
+	out := renderAgentReadme("dai", "review-agent", adapter.Codex{}, []string{"PROXY_TOKEN"}, nil, nil)
 
 	mustContain := []string{
 		"# review-agent",
@@ -32,14 +32,14 @@ func TestRenderAgentReadmeWithAuthVars(t *testing.T) {
 }
 
 func TestRenderAgentReadmeNoCredential(t *testing.T) {
-	out := renderAgentReadme("bob", "plain-agent", "codex", nil, nil, nil)
+	out := renderAgentReadme("bob", "plain-agent", adapter.Codex{}, nil, nil, nil)
 	if !strings.Contains(out, "トークンを要するモデルプロバイダを宣言していません") {
 		t.Errorf("expected no-credential note, got:\n%s", out)
 	}
 }
 
 func TestRenderAgentReadmeClaudeUnmanagedAuth(t *testing.T) {
-	out := renderAgentReadme("dai", "review-agent", "claude-code", nil, nil, nil)
+	out := renderAgentReadme("dai", "review-agent", adapter.ClaudeCode{}, nil, nil, nil)
 
 	// Claude Code auth is not encave-managed: the README must say so and give the
 	// per-OS login guidance, not the keyring / `encave auth set` instructions.
@@ -70,7 +70,7 @@ func TestRenderAgentReadmeListsModelProviders(t *testing.T) {
 	providers := []adapter.ProviderInfo{
 		{Name: "proxy", BaseURL: "https://proxy.example.com/v1", WireAPI: "responses", EnvKey: "PROXY_TOKEN"},
 	}
-	out := renderAgentReadme("dai", "review-agent", "codex", []string{"PROXY_TOKEN"}, providers, nil)
+	out := renderAgentReadme("dai", "review-agent", adapter.Codex{}, []string{"PROXY_TOKEN"}, providers, nil)
 	for _, s := range []string{
 		"## モデルプロバイダ",
 		"含まれていません",
@@ -94,7 +94,7 @@ func TestRenderAgentReadmeListsMCPServers(t *testing.T) {
 		{Name: "github", Command: "npx", Args: []string{"-y", "@modelcontextprotocol/server-github"}},
 		{Name: "linear", URL: "https://mcp.linear.app/sse"},
 	}
-	out := renderAgentReadme("dai", "review-agent", "codex", nil, nil, mcps)
+	out := renderAgentReadme("dai", "review-agent", adapter.Codex{}, nil, nil, mcps)
 
 	for _, s := range []string{
 		"## 必要な MCP サーバー",

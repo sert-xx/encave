@@ -60,12 +60,13 @@ func cmdRun(args []string) int {
 	model := fs.String("model", "", "override the model at launch")
 	sandbox := fs.String("sandbox", "", "override the sandbox/approval mode at launch")
 	var overrides multiFlag
-	fs.Var(&overrides, "c", "raw target config override (repeatable; Codex TOML key=value)")
+	fs.Var(&overrides, "c", "raw target config override (repeatable; Codex TOML key=value; unsupported by some targets)")
 	dryRun := fs.Bool("dry-run", false, "print the resolved command and environment (secrets redacted) without launching")
 	noAuth := fs.Bool("no-auth", false, "launch without injecting any credential")
+	nativeTarget := fs.String("target", "", "with 'default': which target's native home to launch (e.g. codex, claude-code)")
 	fs.Usage = func() {
-		fmt.Fprintln(os.Stderr, "usage: encave run [<owner>/<repo>|default] [--model M] [--sandbox S] [-c k=v] [--dry-run] [-- <agent-args...>]")
-		fmt.Fprintln(os.Stderr, "  No target: choose interactively. 'default': your own home (e.g. ~/.codex), no isolation/injection.")
+		fmt.Fprintln(os.Stderr, "usage: encave run [<owner>/<repo>|default] [--model M] [--sandbox S] [-c k=v] [--target T] [--dry-run] [-- <agent-args...>]")
+		fmt.Fprintln(os.Stderr, "  No target: choose interactively. 'default': your own native home (no isolation/injection); pick which with --target.")
 		fs.PrintDefaults()
 	}
 	if err := fs.Parse(flagArgs); err != nil {
@@ -86,7 +87,7 @@ func cmdRun(args []string) int {
 	var sel runSelection
 	switch {
 	case refArg == nativeRef:
-		sel = runSelection{native: true}
+		sel = runSelection{native: true, nativeTarget: *nativeTarget}
 	case refArg != "":
 		r, err := parseAgentRef(refArg)
 		if err != nil {
@@ -103,7 +104,7 @@ func cmdRun(args []string) int {
 	}
 
 	if sel.native {
-		return launchNative(agentArgs, *model, *sandbox, overrides, *dryRun)
+		return launchNative(sel.nativeTarget, agentArgs, *model, *sandbox, overrides, *dryRun)
 	}
 	return launchAgent(root, sel.ref, agentArgs, *model, *sandbox, overrides, *dryRun, *noAuth)
 }
@@ -114,11 +115,15 @@ func cmdRun(args []string) int {
 const nativeRef = "default"
 
 // launchNative runs the target CLI against the user's own default home with the
-// environment passed through unchanged: CODEX_HOME is not overridden and no
-// keyring credential is injected, so it behaves exactly like running the target
-// CLI directly. encave is a pure passthrough launcher here.
-func launchNative(agentArgs []string, model, sandbox string, overrides []string, dryRun bool) int {
-	ad, err := adapter.Get(adapter.DefaultName)
+// environment passed through unchanged: the target's home var is not overridden
+// and no keyring credential is injected, so it behaves exactly like running the
+// target CLI directly. encave is a pure passthrough launcher here. target selects
+// which adapter's native home to launch (empty = the default target).
+func launchNative(target string, agentArgs []string, model, sandbox string, overrides []string, dryRun bool) int {
+	if target == "" {
+		target = adapter.DefaultName
+	}
+	ad, err := adapter.Get(target)
 	if err != nil {
 		errf("%v", err)
 		return 1
@@ -268,7 +273,9 @@ func launchAgent(root string, ref AgentRef, agentArgs []string, model, sandbox s
 	}
 
 	if cfgWrite {
-		if err := os.WriteFile(cfgPath, cfgData, 0o644); err != nil {
+		// 0600: the effective config can embed the user's own env values (e.g. a
+		// Claude settings.json "env" block), so keep it owner-only at rest.
+		if err := os.WriteFile(cfgPath, cfgData, 0o600); err != nil {
 			errf("writing effective config: %v", err)
 			return 1
 		}

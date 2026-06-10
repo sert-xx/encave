@@ -175,11 +175,7 @@ func cmdNew(args []string) int {
 
 	fmt.Println()
 	fmt.Println("Next steps:")
-	editHint := "agents/, skills/"
-	if base, _ := ad.ConfigLayout(); base != "" {
-		editHint += ", " + base
-	}
-	fmt.Printf("  1. Edit the agent (%s) under %s\n", editHint, dst)
+	fmt.Printf("  1. Edit the agent (%s) under %s\n", editTargetsHint(ad, ", "), dst)
 	fmt.Printf("  2. Try it locally:  encave %s\n", ref)
 	fmt.Printf("  3. Publish it:      encave publish %s --tag v1.0.0\n", ref)
 	return 0
@@ -204,7 +200,7 @@ func maybeWriteReadme(dst string, ref AgentRef, ad adapter.Adapter, srcConfig []
 	providers, _ := ad.ModelProviders(srcConfig)
 	mcps, _ := ad.MCPServers(srcConfig)
 
-	content := renderAgentReadme(ref.Owner, ref.Repo, ad.Name(), authVars, providers, mcps)
+	content := renderAgentReadme(ref.Owner, ref.Repo, ad, authVars, providers, mcps)
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		return fmt.Sprintf("not written (%v)", err)
 	}

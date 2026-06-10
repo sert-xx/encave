@@ -3,6 +3,8 @@ package adapter
 import (
 	"encoding/json"
 	"reflect"
+	"slices"
+	"strings"
 	"testing"
 )
 
@@ -55,26 +57,55 @@ func TestClaudeBuildBaseConfigWhitelist(t *testing.T) {
 	if err := json.Unmarshal(out, &m); err != nil {
 		t.Fatal(err)
 	}
-	for _, keep := range []string{"model", "permissions", "hooks", "outputStyle"} {
+	for _, keep := range []string{"model", "permissions", "outputStyle"} {
 		if _, ok := m[keep]; !ok {
 			t.Errorf("whitelisted key %q was dropped", keep)
 		}
 	}
-	// Environment/secret/identity/UI keys must never be packaged.
-	for _, drop := range []string{"env", "apiKeyHelper", "forceLoginMethod", "editorMode", "tui"} {
+	// Environment/secret/identity/UI keys must never be packaged. "hooks" is
+	// excluded too: it executes arbitrary shell commands, so packaging it would be
+	// silent code execution on the consumer (same rationale as Codex mcp_servers).
+	for _, drop := range []string{"hooks", "env", "apiKeyHelper", "forceLoginMethod", "editorMode", "tui"} {
 		if _, ok := m[drop]; ok {
-			t.Errorf("non-whitelisted key %q was kept (would leak environment/secret/personal config)", drop)
+			t.Errorf("non-whitelisted key %q was kept (would leak environment/secret/personal config or enable RCE)", drop)
 		}
 	}
 }
 
 func TestClaudeBuildBaseConfigEmpty(t *testing.T) {
+	// No source settings must still yield a valid JSON object, never a 0-byte
+	// (invalid) file.
 	out, err := ClaudeCode{}.BuildBaseConfig(nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if out != nil {
-		t.Fatalf("expected nil for empty input, got %q", out)
+	if strings.TrimSpace(string(out)) != "{}" {
+		t.Fatalf("expected \"{}\" for empty input, got %q", out)
+	}
+	var m map[string]any
+	if err := json.Unmarshal(out, &m); err != nil {
+		t.Fatalf("empty-input output is not valid JSON: %v", err)
+	}
+}
+
+func TestClaudeManagedAuthAndNotes(t *testing.T) {
+	c := ClaudeCode{}
+	if c.ManagedAuth() {
+		t.Fatal("claude-code auth must not be encave-managed")
+	}
+	notes := c.CredentialNotes("dai/review-agent")
+	joined := strings.Join(notes, "\n")
+	for _, want := range []string{"macOS", "claude setup-token", "CLAUDE_CODE_OAUTH_TOKEN", "dai/review-agent"} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("CredentialNotes missing %q:\n%s", want, joined)
+		}
+	}
+}
+
+func TestClaudeExampleInvocation(t *testing.T) {
+	got := ClaudeCode{}.ExampleInvocation()
+	if len(got) == 0 || got[0] != "-p" {
+		t.Fatalf("ExampleInvocation = %v, want it to start with -p", got)
 	}
 }
 
@@ -139,34 +170,28 @@ func TestClaudeBuildLaunchRejectsRawConfig(t *testing.T) {
 
 func TestClaudeIgnoresStateAndSecrets(t *testing.T) {
 	c := ClaudeCode{}
-	contains := func(list []string, want string) bool {
-		for _, s := range list {
-			if s == want {
-				return true
-			}
-		}
-		return false
-	}
 
 	// Credentials, app state, sessions, and local overrides must be both
 	// scaffold-excluded and gitignored so they are never copied or committed.
+	// Entries are root-anchored (leading "/") so they don't clobber like-named
+	// author content deeper in the tree (verified in fsutil's copy tests).
 	excludeWant := []string{
-		".credentials.json", ".claude.json", "projects", "todos",
-		"shell-snapshots", "history", "logs", "statsig",
-		"settings.local.json", "CLAUDE.local.md", "settings.json",
+		"/.credentials.json", "/.claude.json", "/projects", "/todos",
+		"/shell-snapshots", "/history", "/logs", "/statsig",
+		"/settings.local.json", "/CLAUDE.local.md", "/settings.json",
 	}
 	for _, w := range excludeWant {
-		if !contains(c.ScaffoldExcludes(), w) {
+		if !slices.Contains(c.ScaffoldExcludes(), w) {
 			t.Errorf("ScaffoldExcludes missing %q", w)
 		}
 	}
 	gitignoreWant := []string{
-		".credentials.json", ".claude.json", "projects/", "todos/",
-		"shell-snapshots/", "history/", "logs/", "statsig/",
-		"settings.local.json", "CLAUDE.local.md", "settings.json",
+		"/.credentials.json", "/.claude.json", "/projects/", "/todos/",
+		"/shell-snapshots/", "/history/", "/logs/", "/statsig/",
+		"/settings.local.json", "/CLAUDE.local.md", "/settings.json",
 	}
 	for _, w := range gitignoreWant {
-		if !contains(c.GitignoreLines(), w) {
+		if !slices.Contains(c.GitignoreLines(), w) {
 			t.Errorf("GitignoreLines missing %q", w)
 		}
 	}

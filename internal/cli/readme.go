@@ -7,6 +7,32 @@ import (
 	"github.com/sert-xx/encave/internal/adapter"
 )
 
+// editTargetsHint lists the things an author edits in an agent of this target
+// ("agents/, skills/" plus the committed base config, joined by sep). Shared by
+// `new`'s "Next steps" output and the generated README so they never diverge.
+func editTargetsHint(ad adapter.Adapter, sep string) string {
+	parts := []string{"agents/", "skills/"}
+	if base, _ := ad.ConfigLayout(); base != "" {
+		parts = append(parts, base)
+	}
+	return strings.Join(parts, sep)
+}
+
+// exampleInvocation renders the adapter's example args (after `--`) for docs,
+// quoting any argument that contains a space so the example is copy-pasteable.
+func exampleInvocation(ad adapter.Adapter) string {
+	args := ad.ExampleInvocation()
+	quoted := make([]string, len(args))
+	for i, a := range args {
+		if strings.ContainsAny(a, " \t") {
+			quoted[i] = `"` + a + `"`
+		} else {
+			quoted[i] = a
+		}
+	}
+	return strings.Join(quoted, " ")
+}
+
 // renderAgentReadme produces a README.md tailored to a freshly scaffolded agent.
 // It documents the encave consumer workflow (install / auth / run) using the
 // agent's GitHub identity and discovered auth environment variables, lists the
@@ -17,17 +43,10 @@ import (
 // "codex"); authVars are the credential env var names; providers and mcps are the
 // model providers and MCP servers the source config referenced (not packaged —
 // listed as setup requirements). Any of these may be empty.
-func renderAgentReadme(owner, repo, target string, authVars []string, providers []adapter.ProviderInfo, mcps []adapter.MCPServerInfo) string {
+func renderAgentReadme(owner, repo string, ad adapter.Adapter, authVars []string, providers []adapter.ProviderInfo, mcps []adapter.MCPServerInfo) string {
 	ref := owner + "/" + repo
-
-	// Resolve target capabilities so the auth guidance matches how this target
-	// actually authenticates. Unknown targets default to the encave-managed model.
-	managedAuth := true
-	baseCfg := ""
-	if ad, err := adapter.Get(target); err == nil {
-		managedAuth = ad.ManagedAuth()
-		baseCfg, _ = ad.ConfigLayout()
-	}
+	target := ad.Name()
+	managedAuth := ad.ManagedAuth()
 
 	var b strings.Builder
 
@@ -67,15 +86,13 @@ func renderAgentReadme(owner, repo, target string, authVars []string, providers 
 	// 認証情報
 	b.WriteString("## 認証情報\n\n")
 	if !managedAuth {
-		b.WriteString("このターゲットの認証情報は encave では管理しません。ターゲット CLI 自身のログインを\n")
-		b.WriteString("使います:\n\n")
-		b.WriteString("- **macOS**: 通常の `claude /login`（OS の Keychain に保存）がそのまま使えます。\n")
-		b.WriteString("  encave が隔離ホームを使っても、Keychain はグローバルなのでログイン状態を保てます。\n")
-		b.WriteString("- **Linux / Windows**: 隔離ホームは最初ログアウト状態です。中で一度だけ認証してください\n")
-		b.WriteString("  （`encave " + ref + " -- /login`、または `claude setup-token` で得た\n")
-		b.WriteString("  `CLAUDE_CODE_OAUTH_TOKEN` を設定）。\n\n")
-		b.WriteString("> **TODO:** 接続先ゲートウェイがある場合は `ANTHROPIC_BASE_URL`（環境固有・非梱包）の\n")
-		b.WriteString("> 設定方法を記載してください。\n\n")
+		// The target manages its own login; the adapter supplies the per-target
+		// guidance so this package stays target-agnostic.
+		for _, line := range ad.CredentialNotes(ref) {
+			b.WriteString(line)
+			b.WriteString("\n")
+		}
+		b.WriteString("\n")
 	} else if len(providers) > 0 || len(authVars) > 0 {
 		b.WriteString("このエージェントのモデルプロバイダはベアラートークンを必要とします。OS の keyring に\n")
 		b.WriteString("一度保存すれば、encave が起動時にプロバイダへ注入します（プロバイダの `env_key` を\n")
@@ -147,7 +164,7 @@ func renderAgentReadme(owner, repo, target string, authVars []string, providers 
 	b.WriteString("`--` 以降の引数はターゲット CLI へそのまま渡されます。`--dry-run` で、起動せずに\n")
 	b.WriteString("実行コマンド（認証情報はマスク）を確認できます:\n\n")
 	b.WriteString("```sh\n")
-	fmt.Fprintf(&b, "encave %s --dry-run -- exec \"do the task\"\n", ref)
+	fmt.Fprintf(&b, "encave %s --dry-run -- %s\n", ref, exampleInvocation(ad))
 	b.WriteString("```\n\n")
 
 	// メンテナ向け
@@ -155,19 +172,19 @@ func renderAgentReadme(owner, repo, target string, authVars []string, providers 
 	b.WriteString("このエージェントは encave で構築・公開されています:\n\n")
 	b.WriteString("```sh\n")
 	newCmd := "encave new " + ref
-	if target != "" && target != adapter.DefaultName {
+	if target != adapter.DefaultName {
 		newCmd += " --target " + target
 	}
 	fmt.Fprintf(&b, "%s   # ベースホームから雛形作成（秘密情報は除外）\n", newCmd)
-	editTargets := "agents/、skills/"
-	if baseCfg != "" {
-		editTargets += "、" + baseCfg
-	}
-	fmt.Fprintf(&b, "# ...%s を調整...\n", editTargets)
+	fmt.Fprintf(&b, "# ...%s を調整...\n", editTargetsHint(ad, "、"))
 	fmt.Fprintf(&b, "encave publish %s --tag <tag> --remote git@github.com:%s.git\n", ref, ref)
 	b.WriteString("```\n\n")
-	b.WriteString("`encave publish` はコミット前に fail-closed の秘密スキャンを実行します。認証情報は\n")
-	b.WriteString("keyring に保管し、このリポジトリには絶対に置かないでください。\n\n")
+	b.WriteString("`encave publish` はコミット前に fail-closed の秘密スキャンを実行します。")
+	if managedAuth {
+		b.WriteString("認証情報は\nkeyring に保管し、このリポジトリには絶対に置かないでください。\n\n")
+	} else {
+		b.WriteString("認証情報は\nターゲット CLI 自身が管理します。設定や skill のみをコミットし、秘密情報はこのリポジトリに\n置かないでください。\n\n")
+	}
 
 	b.WriteString("---\n\n")
 	b.WriteString("<sub>`encave new` により生成。上記の TODO を埋めて、このエージェントを説明してください。</sub>\n")

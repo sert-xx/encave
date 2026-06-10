@@ -3,6 +3,7 @@ package adapter
 import (
 	"bytes"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -122,9 +123,7 @@ func (Codex) BuildEffectiveConfig(base, home []byte) ([]byte, error) {
 		if err := toml.Unmarshal(base, &bm); err != nil {
 			return nil, fmt.Errorf("parsing base config: %w", err)
 		}
-		for k, v := range bm {
-			merged[k] = v // agent's keys win (full top-level replace)
-		}
+		maps.Copy(merged, bm) // agent's keys win (full top-level replace)
 	}
 
 	// encave owns the auth wiring. Drop Codex's own credential store so it does
@@ -188,18 +187,16 @@ func (Codex) HomeEnvVar() string { return "CODEX_HOME" }
 // because Codex ties its stored login to CODEX_HOME.
 func (Codex) ManagedAuth() bool { return true }
 
+// CredentialNotes implements Adapter: Codex auth is encave-managed, so there are
+// no target-specific notes (the README renders the keyring/auth-set flow).
+func (Codex) CredentialNotes(string) []string { return nil }
+
+// ExampleInvocation implements Adapter: Codex's non-interactive subcommand.
+func (Codex) ExampleInvocation() []string { return []string{"exec", "do the task"} }
+
 // BaseHome implements Adapter. It honors CODEX_HOME, then falls back to
 // ~/.codex.
-func (Codex) BaseHome() (string, error) {
-	if h := os.Getenv("CODEX_HOME"); h != "" {
-		return h, nil
-	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", fmt.Errorf("locating home directory: %w", err)
-	}
-	return filepath.Join(home, ".codex"), nil
-}
+func (Codex) BaseHome() (string, error) { return baseHome("CODEX_HOME", ".codex") }
 
 // Validate implements Adapter. A Codex agent has either the packaged base config
 // (new layout) or a config.toml (legacy / generated effective config).

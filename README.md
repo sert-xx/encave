@@ -10,10 +10,12 @@ The name **encave** comes from *en-* + *cave* / *enclave*: each agent is sealed
 into its own isolated box (*encaved*) and run there. The canonical command is
 `encave`; there is intentionally no official short alias.
 
-The first target is the **Codex CLI**, but the core ideas — an isolated agent
-home + launch-time credential injection + git-clone-and-tag distribution — are
-target-agnostic and live behind an adapter interface, so other agent CLIs can be
-added later.
+The supported targets are the **Codex CLI** and **Claude Code**. The core ideas —
+an isolated agent home + git-clone-and-tag distribution, with credentials kept
+out of the repo — are target-agnostic and live behind an adapter interface, so
+more agent CLIs can be added later. How the credential is supplied differs per
+target (encave-injected for Codex; the target's own login for Claude Code) — see
+[Targets](#targets).
 
 ## Why
 
@@ -25,8 +27,8 @@ setup; plugins can't carry the orchestration layer and merge into the receiver's
 config instead of staying isolated.
 
 encave distributes a **whole agent home as one reproducible unit**, installs it
-in isolation, and launches it with secrets injected at runtime — so the
-receiver's personal home is never modified.
+in isolation, and launches it without ever modifying the receiver's personal
+home — keeping credentials out of the shared repo.
 
 ## How it works
 
@@ -35,14 +37,16 @@ receiver's personal home is never modified.
 - **Isolated**: each installed agent lives under `<root>/<owner>/<repo>` and is
   launched with its own home directory (Codex: `CODEX_HOME`; Claude Code:
   `CLAUDE_CONFIG_DIR`). Your `~/.codex` / `~/.claude` is never touched.
-- **Secrets stay out of git**: non-secret config (provider `base_url`, the
-  *name* of the auth env var, `wire_api`, …) is committed. Real credentials live
-  in the **OS keyring** and are injected into the launched child process's
-  environment only — never written to the repo, logs, or stdout.
+- **Secrets stay out of git**: only non-secret config is committed. For the Codex
+  target, real credentials live in the **OS keyring** and are injected into the
+  launched child process's environment only — never written to the repo, logs, or
+  stdout. The Claude Code target keeps using Claude Code's own login and encave
+  injects nothing (see [Targets](#targets)).
 
-There is deliberately **no command that prints a stored credential**: that would
-be a standing credential-dump oracle. Credentials only ever leave the keyring as
-environment for one launched child process, for that process's lifetime.
+For the Codex target there is deliberately **no command that prints a stored
+credential**: that would be a standing credential-dump oracle. Credentials only
+ever leave the keyring as environment for one launched child process, for that
+process's lifetime.
 
 ## Installation
 
@@ -113,20 +117,22 @@ proxy error is silently skipped. The encave check honors your `GOPROXY`. Set
 ## Quick start (using a shared agent)
 
 ```sh
-# 1. Store your credential once (e.g. a proxy PAT). Re-run when it expires.
+# 1. (Codex agents) Store your credential once (e.g. a proxy PAT); re-run when it
+#    expires. Claude Code agents skip this — they use Claude Code's own login.
 encave auth set --global
 
 # 2. Install an agent, pinned to a released version.
 encave install github.com/dai/review-agent --tag v1.0.0
 
-# 3. Launch it — in its own isolated home, credential injected at launch.
+# 3. Launch it — in its own isolated home.
 encave dai/review-agent
 #    (or run `encave run` and pick from the list)
 ```
 
-Your personal `~/.codex` is never touched. `install` verifies the repo is an
-encave-managed agent (it has a valid `.encave.toml`, written by `encave new`) and
-refuses otherwise; pass `--no-verify` to override for a repo you trust.
+Your personal `~/.codex` / `~/.claude` is never touched. `install` verifies the
+repo is an encave-managed agent (it has a valid `.encave.toml`, written by
+`encave new`) and refuses otherwise; pass `--no-verify` to override for a repo you
+trust. How each target gets its credential differs — see [Targets](#targets).
 
 ## Commands
 
@@ -320,6 +326,11 @@ environment, not the packaged agent.
    child process, and is far smaller than a standing oracle.
 5. **Enterprise policy wins** — MDM/managed policy can override launch-time
    config; encave does not assume its overrides always take effect.
+6. **Claude Code caveat** — the effective `settings.json` encave generates in a
+   Claude agent home merges your own `~/.claude/settings.json`, including any
+   `env` block. If you keep credential *values* there, they are written to that
+   file (gitignored, mode 0600, never committed by `publish`). Prefer keeping
+   credentials in your shell or Keychain rather than `settings.json` `env`.
 
 ## Layout
 

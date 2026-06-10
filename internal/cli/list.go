@@ -85,10 +85,13 @@ func findInstalled(root string) []installedAgent {
 }
 
 // runSelection is the outcome of the interactive launch picker: either an
-// installed agent reference, or the user's native default home.
+// installed agent reference, or the user's native home for a given target.
 type runSelection struct {
 	native bool
-	ref    AgentRef
+	// nativeTarget names which target's native home to launch when native is
+	// true (empty means the default target).
+	nativeTarget string
+	ref          AgentRef
 }
 
 // pickLaunchTarget lets the user choose interactively what `encave run` should
@@ -102,25 +105,31 @@ func pickLaunchTarget(root string) (runSelection, bool) {
 	if !isInteractive() {
 		errf("no agent specified and no terminal available to choose interactively")
 		fmt.Fprintln(os.Stderr, "  an installed agent:  encave run <owner>/<repo>")
-		fmt.Fprintf(os.Stderr, "  your default home:   encave run %s\n", nativeRef)
+		fmt.Fprintf(os.Stderr, "  your default home:   encave run %s [--target <name>]\n", nativeRef)
 		fmt.Fprintln(os.Stderr, "  or list agents:      encave list")
 		return runSelection{}, false
 	}
 
-	labels := make([]string, 0, len(agents)+1)
+	// Offer one native-home entry per registered target, after the installed
+	// agents, so a user of any target can launch their own home through encave.
+	nativeTargets := adapter.Names()
+	sort.Strings(nativeTargets)
+
+	labels := make([]string, 0, len(agents)+len(nativeTargets))
 	for _, a := range agents {
 		labels = append(labels, fmt.Sprintf("%-30s [%s] %s", a.ref, a.target, a.ref2))
 	}
-	// The native default home is always the last entry.
-	labels = append(labels, fmt.Sprintf("%-30s (your own setup; no isolation/injection)",
-		"your default "+adapter.DefaultName+" home"))
+	for _, t := range nativeTargets {
+		labels = append(labels, fmt.Sprintf("%-30s (your own setup; no isolation/injection)",
+			"your default "+t+" home"))
+	}
 
 	idx, ok := selectFromList("Choose what to launch (↑/↓, Enter; q to cancel):", labels)
 	if !ok {
 		return runSelection{}, false
 	}
-	if idx == len(agents) { // the native-home entry
-		return runSelection{native: true}, true
+	if idx >= len(agents) { // a native-home entry
+		return runSelection{native: true, nativeTarget: nativeTargets[idx-len(agents)]}, true
 	}
 	ref, perr := parseAgentRef(agents[idx].ref)
 	if perr != nil {

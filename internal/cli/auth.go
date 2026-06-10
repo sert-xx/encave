@@ -8,6 +8,9 @@ import (
 	"os"
 	"strings"
 
+	"github.com/sert-xx/encave/internal/adapter"
+	"github.com/sert-xx/encave/internal/agentmeta"
+	"github.com/sert-xx/encave/internal/paths"
 	"github.com/sert-xx/encave/internal/secrets"
 	"golang.org/x/term"
 )
@@ -38,8 +41,9 @@ func cmdAuth(args []string) int {
 }
 
 // scopeFlags adds the mutually-exclusive --agent/--global selectors to a flag
-// set and returns a resolver for the chosen scope (defaulting to global).
-func scopeFlags(fs *flag.FlagSet) func() (string, error) {
+// set and returns a resolver for the chosen scope (defaulting to global) plus a
+// pointer to the raw --agent value (for target-specific warnings).
+func scopeFlags(fs *flag.FlagSet) (func() (string, error), *string) {
 	agent := fs.String("agent", "", "scope the credential to a single agent (<owner>/<repo>)")
 	global := fs.Bool("global", false, "scope the credential to all agents (default)")
 	return func() (string, error) {
@@ -54,12 +58,54 @@ func scopeFlags(fs *flag.FlagSet) func() (string, error) {
 			return ref.Scope(), nil
 		}
 		return secrets.GlobalScope, nil
+	}, agent
+}
+
+// warnIfUnmanagedTarget prints a note when the credential is scoped to an
+// installed agent whose target does not use encave-injected credentials (e.g.
+// Claude Code), so the user isn't left thinking a stored-but-never-injected token
+// authenticates the agent. It is best-effort and silent for global scope,
+// not-yet-installed agents, and managed targets.
+func warnIfUnmanagedTarget(agentFlag string) {
+	target, warn := unmanagedAuthTarget(agentFlag)
+	if !warn {
+		return
 	}
+	fmt.Fprintf(os.Stderr, "encave: note: %s targets %q, which manages its own login; encave will NOT inject this credential at launch.\n", agentFlag, target)
+	fmt.Fprintln(os.Stderr, "  the stored value is unused for this target — see the agent's README for how it authenticates.")
+}
+
+// unmanagedAuthTarget reports the target of the installed agent named by the
+// --agent flag and whether a "credential won't be injected" warning is
+// warranted. It returns warn=false for an empty flag (global scope), an invalid
+// or not-yet-installed agent, or a target whose auth encave manages.
+func unmanagedAuthTarget(agentFlag string) (target string, warn bool) {
+	if agentFlag == "" {
+		return "", false
+	}
+	ref, err := parseAgentRef(agentFlag)
+	if err != nil {
+		return "", false
+	}
+	root, err := paths.Root()
+	if err != nil {
+		return "", false
+	}
+	dir := paths.AgentDir(root, ref.Owner, ref.Repo)
+	if info, serr := os.Stat(dir); serr != nil || !info.IsDir() {
+		return "", false // not installed; can't know its target yet
+	}
+	target = agentmeta.DefaultTargetOr(dir)
+	ad, err := adapter.Get(target)
+	if err != nil || ad.ManagedAuth() {
+		return target, false
+	}
+	return target, true
 }
 
 func authSet(args []string) int {
 	fs := flag.NewFlagSet("auth set", flag.ContinueOnError)
-	resolve := scopeFlags(fs)
+	resolve, agent := scopeFlags(fs)
 	stdinFlag := fs.Bool("stdin", false, "read the secret from stdin instead of prompting (no trailing newline kept)")
 	fs.Usage = func() {
 		fmt.Fprintln(os.Stderr, "usage: encave auth set [--agent <owner/repo>|--global] [--stdin]")
@@ -89,12 +135,13 @@ func authSet(args []string) int {
 		return 1
 	}
 	fmt.Printf("Stored credential for scope %q in the OS keyring.\n", scope)
+	warnIfUnmanagedTarget(*agent)
 	return 0
 }
 
 func authStatus(args []string) int {
 	fs := flag.NewFlagSet("auth status", flag.ContinueOnError)
-	resolve := scopeFlags(fs)
+	resolve, _ := scopeFlags(fs)
 	fs.Usage = func() {
 		fmt.Fprintln(os.Stderr, "usage: encave auth status [--agent <owner/repo>|--global]")
 		fs.PrintDefaults()
@@ -122,7 +169,7 @@ func authStatus(args []string) int {
 
 func authClear(args []string) int {
 	fs := flag.NewFlagSet("auth clear", flag.ContinueOnError)
-	resolve := scopeFlags(fs)
+	resolve, _ := scopeFlags(fs)
 	fs.Usage = func() {
 		fmt.Fprintln(os.Stderr, "usage: encave auth clear [--agent <owner/repo>|--global]")
 		fs.PrintDefaults()

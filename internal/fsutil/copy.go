@@ -93,11 +93,21 @@ func CopyTree(src, dst string, excludes []string) (CopyResult, error) {
 
 // matchesAny reports whether rel/base matches any exclusion pattern. A bare name
 // pattern (no slash) is matched against every path component as well, so e.g.
-// "logs" prunes any directory named logs at any depth.
+// "logs" prunes any directory named logs at any depth. A pattern with a leading
+// "/" is root-anchored: it matches only the relative path from src root (e.g.
+// "/projects" prunes <root>/projects but not skills/x/projects), so common state
+// names can be excluded without clobbering like-named content deeper in the tree.
 func matchesAny(rel, base string, patterns []string) bool {
 	relSlash := filepath.ToSlash(rel)
 	for _, p := range patterns {
 		if p == "" {
+			continue
+		}
+		if strings.HasPrefix(p, "/") {
+			// Root-anchored: match only against the full relative path.
+			if ok, _ := filepath.Match(strings.TrimPrefix(p, "/"), relSlash); ok {
+				return true
+			}
 			continue
 		}
 		if ok, _ := filepath.Match(p, base); ok {
