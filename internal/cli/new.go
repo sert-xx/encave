@@ -175,7 +175,11 @@ func cmdNew(args []string) int {
 
 	fmt.Println()
 	fmt.Println("Next steps:")
-	fmt.Printf("  1. Edit the agent (agents/, skills/, config.toml) under %s\n", dst)
+	editHint := "agents/, skills/"
+	if base, _ := ad.ConfigLayout(); base != "" {
+		editHint += ", " + base
+	}
+	fmt.Printf("  1. Edit the agent (%s) under %s\n", editHint, dst)
 	fmt.Printf("  2. Try it locally:  encave %s\n", ref)
 	fmt.Printf("  3. Publish it:      encave publish %s --tag v1.0.0\n", ref)
 	return 0

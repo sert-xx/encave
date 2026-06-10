@@ -19,6 +19,16 @@ import (
 // listed as setup requirements). Any of these may be empty.
 func renderAgentReadme(owner, repo, target string, authVars []string, providers []adapter.ProviderInfo, mcps []adapter.MCPServerInfo) string {
 	ref := owner + "/" + repo
+
+	// Resolve target capabilities so the auth guidance matches how this target
+	// actually authenticates. Unknown targets default to the encave-managed model.
+	managedAuth := true
+	baseCfg := ""
+	if ad, err := adapter.Get(target); err == nil {
+		managedAuth = ad.ManagedAuth()
+		baseCfg, _ = ad.ConfigLayout()
+	}
+
 	var b strings.Builder
 
 	fmt.Fprintf(&b, "# %s\n\n", repo)
@@ -28,15 +38,24 @@ func renderAgentReadme(owner, repo, target string, authVars []string, providers 
 	b.WriteString("これは [**encave**](https://github.com/sert-xx/encave) のエージェントです。")
 	fmt.Fprintf(&b, "**%s** CLI 用の自己完結・隔離されたエージェントホーム", target)
 	b.WriteString("（設定＋オーケストレーション＋skill）を GitHub 経由で配布します。encave は専用の\n")
-	b.WriteString("ホームディレクトリで起動し、起動時に認証情報を注入するため、あなたの個人環境には\n")
-	b.WriteString("一切触れず、秘密情報もこのリポジトリには保存されません。\n\n")
+	if managedAuth {
+		b.WriteString("ホームディレクトリで起動し、起動時に認証情報を注入するため、あなたの個人環境には\n")
+		b.WriteString("一切触れず、秘密情報もこのリポジトリには保存されません。\n\n")
+	} else {
+		b.WriteString("ホームディレクトリで起動するため、あなたの個人環境には一切触れず、秘密情報も\n")
+		b.WriteString("このリポジトリには保存されません。\n\n")
+	}
 
 	// 要件
 	b.WriteString("## 要件\n\n")
 	b.WriteString("- [encave](https://github.com/sert-xx/encave):\n")
 	b.WriteString("  `go install github.com/sert-xx/encave@latest`\n")
 	fmt.Fprintf(&b, "- ターゲット CLI: **%s**\n", target)
-	b.WriteString("- Linux では keyring 用に稼働中の Secret Service（例: gnome-keyring）\n\n")
+	if managedAuth {
+		b.WriteString("- Linux では keyring 用に稼働中の Secret Service（例: gnome-keyring）\n\n")
+	} else {
+		b.WriteString("\n")
+	}
 
 	// インストール
 	b.WriteString("## インストール\n\n")
@@ -47,7 +66,17 @@ func renderAgentReadme(owner, repo, target string, authVars []string, providers 
 
 	// 認証情報
 	b.WriteString("## 認証情報\n\n")
-	if len(providers) > 0 || len(authVars) > 0 {
+	if !managedAuth {
+		b.WriteString("このターゲットの認証情報は encave では管理しません。ターゲット CLI 自身のログインを\n")
+		b.WriteString("使います:\n\n")
+		b.WriteString("- **macOS**: 通常の `claude /login`（OS の Keychain に保存）がそのまま使えます。\n")
+		b.WriteString("  encave が隔離ホームを使っても、Keychain はグローバルなのでログイン状態を保てます。\n")
+		b.WriteString("- **Linux / Windows**: 隔離ホームは最初ログアウト状態です。中で一度だけ認証してください\n")
+		b.WriteString("  （`encave " + ref + " -- /login`、または `claude setup-token` で得た\n")
+		b.WriteString("  `CLAUDE_CODE_OAUTH_TOKEN` を設定）。\n\n")
+		b.WriteString("> **TODO:** 接続先ゲートウェイがある場合は `ANTHROPIC_BASE_URL`（環境固有・非梱包）の\n")
+		b.WriteString("> 設定方法を記載してください。\n\n")
+	} else if len(providers) > 0 || len(authVars) > 0 {
 		b.WriteString("このエージェントのモデルプロバイダはベアラートークンを必要とします。OS の keyring に\n")
 		b.WriteString("一度保存すれば、encave が起動時にプロバイダへ注入します（プロバイダの `env_key` を\n")
 		b.WriteString("強制設定するので、環境変数を自分で設定する必要はありません）:\n\n")
@@ -125,8 +154,16 @@ func renderAgentReadme(owner, repo, target string, authVars []string, providers 
 	b.WriteString("## メンテナ向け\n\n")
 	b.WriteString("このエージェントは encave で構築・公開されています:\n\n")
 	b.WriteString("```sh\n")
-	fmt.Fprintf(&b, "encave new %s                  # ベースホームから雛形作成（秘密情報は除外）\n", ref)
-	b.WriteString("# ...agents/、skills/、config.toml を調整...\n")
+	newCmd := "encave new " + ref
+	if target != "" && target != adapter.DefaultName {
+		newCmd += " --target " + target
+	}
+	fmt.Fprintf(&b, "%s   # ベースホームから雛形作成（秘密情報は除外）\n", newCmd)
+	editTargets := "agents/、skills/"
+	if baseCfg != "" {
+		editTargets += "、" + baseCfg
+	}
+	fmt.Fprintf(&b, "# ...%s を調整...\n", editTargets)
 	fmt.Fprintf(&b, "encave publish %s --tag <tag> --remote git@github.com:%s.git\n", ref, ref)
 	b.WriteString("```\n\n")
 	b.WriteString("`encave publish` はコミット前に fail-closed の秘密スキャンを実行します。認証情報は\n")

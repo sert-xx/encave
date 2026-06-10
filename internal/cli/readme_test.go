@@ -38,6 +38,34 @@ func TestRenderAgentReadmeNoCredential(t *testing.T) {
 	}
 }
 
+func TestRenderAgentReadmeClaudeUnmanagedAuth(t *testing.T) {
+	out := renderAgentReadme("dai", "review-agent", "claude-code", nil, nil, nil)
+
+	// Claude Code auth is not encave-managed: the README must say so and give the
+	// per-OS login guidance, not the keyring / `encave auth set` instructions.
+	for _, s := range []string{
+		"encave では管理しません",
+		"macOS",
+		"claude setup-token",
+		"CLAUDE_CODE_OAUTH_TOKEN",
+		"--target claude-code", // maintainer scaffolding command names the target
+		"settings_base.json",   // edit hint uses the target's base config name
+	} {
+		if !strings.Contains(out, s) {
+			t.Errorf("claude README missing %q\n---\n%s", s, out)
+		}
+	}
+	for _, s := range []string{
+		"encave auth set",
+		"keyring 用に稼働中の Secret Service",
+		"起動時に認証情報を注入",
+	} {
+		if strings.Contains(out, s) {
+			t.Errorf("claude README should not contain Codex-managed-auth text %q", s)
+		}
+	}
+}
+
 func TestRenderAgentReadmeListsModelProviders(t *testing.T) {
 	providers := []adapter.ProviderInfo{
 		{Name: "proxy", BaseURL: "https://proxy.example.com/v1", WireAPI: "responses", EnvKey: "PROXY_TOKEN"},

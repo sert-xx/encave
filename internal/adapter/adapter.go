@@ -69,6 +69,12 @@ type Adapter interface {
 	// provider config may come from the user's home at launch.
 	AuthEnvVars(configData []byte) ([]string, error)
 
+	// ManagedAuth reports whether encave stores and injects this target's
+	// credential (Codex, true) versus the target managing its own login
+	// independently of the config dir (Claude Code, false). It drives user-facing
+	// guidance (e.g. the generated README); the launch path keys off AuthEnvVars.
+	ManagedAuth() bool
+
 	// BuildLaunch turns a LaunchRequest into a concrete command.
 	BuildLaunch(req LaunchRequest) (LaunchSpec, error)
 

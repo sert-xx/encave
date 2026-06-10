@@ -184,6 +184,10 @@ func (Codex) Name() string { return "codex" }
 // HomeEnvVar implements Adapter.
 func (Codex) HomeEnvVar() string { return "CODEX_HOME" }
 
+// ManagedAuth implements Adapter: encave stores and injects the Codex credential
+// because Codex ties its stored login to CODEX_HOME.
+func (Codex) ManagedAuth() bool { return true }
+
 // BaseHome implements Adapter. It honors CODEX_HOME, then falls back to
 // ~/.codex.
 func (Codex) BaseHome() (string, error) {

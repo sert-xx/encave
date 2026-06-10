@@ -33,8 +33,8 @@ receiver's personal home is never modified.
 - **Reproducible**: agents are distributed via `git clone` + tag checkout. A tag
   reproduces the provider's configuration byte-for-byte.
 - **Isolated**: each installed agent lives under `<root>/<owner>/<repo>` and is
-  launched with its own home directory (Codex: `CODEX_HOME`). Your `~/.codex` is
-  never touched.
+  launched with its own home directory (Codex: `CODEX_HOME`; Claude Code:
+  `CLAUDE_CONFIG_DIR`). Your `~/.codex` / `~/.claude` is never touched.
 - **Secrets stay out of git**: non-secret config (provider `base_url`, the
   *name* of the auth env var, `wire_api`, …) is committed. Real credentials live
   in the **OS keyring** and are injected into the launched child process's
@@ -52,10 +52,12 @@ environment for one launched child process, for that process's lifetime.
   paths rely on. With `GOTOOLCHAIN=auto` (the Go default), `go install` fetches a
   suitable toolchain automatically.
 - **git** on your `PATH` (used by `install` and `publish`).
-- The **target agent CLI** you want to run — currently the **Codex CLI**.
-- A working **OS keyring**: macOS Keychain and Windows Credential Manager work
-  out of the box; on **Linux** you need a running **Secret Service** such as
-  `gnome-keyring` or KeePassXC's Secret Service.
+- The **target agent CLI** you want to run — the **Codex CLI** or **Claude Code**.
+- For the **Codex** target, a working **OS keyring** (encave injects your
+  credential from it): macOS Keychain and Windows Credential Manager work out of
+  the box; on **Linux** you need a running **Secret Service** such as
+  `gnome-keyring` or KeePassXC's Secret Service. The **Claude Code** target does
+  not use the keyring — see [Targets](#targets).
 
 ### Install with `go install` (recommended)
 
@@ -276,6 +278,34 @@ installed and can access the repo, encave offers to create a **GitHub release**
 for that tag (prompted; `--yes` creates it without asking). If `gh` is missing or
 the remote isn't a GitHub repo it can reach, this step is silently skipped.
 
+## Targets
+
+A *target* is the agent CLI an agent home is built for. Choose it with
+`encave new <owner>/<repo> --target <name>`; it is recorded in `.encave.toml` so
+`run` selects the right behavior automatically. The two differ mainly in **where
+the credential comes from**:
+
+| | **Codex** (`--target codex`, default) | **Claude Code** (`--target claude-code`) |
+|---|---|---|
+| Home variable | `CODEX_HOME` | `CLAUDE_CONFIG_DIR` |
+| Config file | `config.toml` (TOML) | `settings.json` (JSON) |
+| Packaged base | `config_base.toml` | `settings_base.json` |
+| Credential | **encave-managed**: stored in the OS keyring, injected at launch | **not managed by encave** — uses Claude Code's own login (see below) |
+
+**Codex** needs encave to inject a credential because Codex ties its stored login
+to `CODEX_HOME`; isolating the home would otherwise lose it. So you
+`encave auth set` a token once and encave injects it at launch (`encave auth …`).
+
+**Claude Code** stores its credential outside the config directory on macOS (the
+**Keychain**, which is global), so an isolated `CLAUDE_CONFIG_DIR` stays logged in
+with your normal `claude /login` — encave injects nothing. On **Linux/Windows**
+the credential file lives *inside* the config directory, so the isolated home
+starts logged out: just authenticate once inside it (run `claude` and `/login`,
+or set `CLAUDE_CODE_OAUTH_TOKEN` from `claude setup-token`). Either way encave
+never stores or prints a Claude credential. The agent's connection endpoint
+(`ANTHROPIC_BASE_URL`) is environment-specific and comes from your own
+environment, not the packaged agent.
+
 ## Security model
 
 1. **Secrets never enter the repo** — keyring + `.gitignore` + a fail-closed
@@ -350,9 +380,10 @@ Credentials live only in the OS keyring under the `encave` service.
 
 ## Architecture
 
-- `internal/adapter` — target-CLI abstraction; `codex.go` is the first adapter
-  (home env var `CODEX_HOME`, reads `env_key` / `env_http_headers` to know which
-  env vars to inject, builds `codex -c key=value` overrides).
+- `internal/adapter` — target-CLI abstraction. `codex.go` (home env var
+  `CODEX_HOME`, reads `env_key` / `env_http_headers` to know which env vars to
+  inject, builds `codex -c key=value` overrides) and `claude.go` (home env var
+  `CLAUDE_CONFIG_DIR`, JSON settings, injects no credential — see Targets).
 - `internal/secrets` — keyring wrapper; the only value-returning call,
   `Resolve`, is used solely on the launch path.
 - `internal/scan` — the fail-closed secret scanner used by `publish`.
@@ -366,9 +397,11 @@ Credentials live only in the OS keyring under the `encave` service.
 
 ## Status
 
-v1: Codex CLI, single custom provider with a static/long-lived credential (e.g.
-a 30-day PAT) injected at launch. Planned next: generic Codex auth (ChatGPT
-login / API key), a Claude Code adapter, and per-agent multiple credentials.
+Targets: **Codex CLI** (single custom provider with a static/long-lived
+credential, e.g. a 30-day PAT, injected at launch) and **Claude Code** (isolated
+`CLAUDE_CONFIG_DIR`, using Claude Code's own login — encave injects nothing).
+Planned next: generic Codex auth (ChatGPT login / API key), per-agent multiple
+credentials, and consumer-side trust (provenance, update diffs).
 
 ## Contributing & security
 
