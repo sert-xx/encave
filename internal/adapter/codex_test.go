@@ -2,6 +2,7 @@ package adapter
 
 import (
 	"reflect"
+	"slices"
 	"testing"
 
 	"github.com/BurntSushi/toml"
@@ -79,41 +80,25 @@ func TestCodexPersonalSubdirsLinkedNotPackaged(t *testing.T) {
 	if len(personal) == 0 {
 		t.Fatal("expected at least one personal subdir (rules)")
 	}
-	has := func(list []string, want string) bool {
-		for _, s := range list {
-			if s == want {
-				return true
-			}
-		}
-		return false
-	}
 	for _, sub := range personal {
-		if !has(c.ScaffoldExcludes(), sub) {
+		if !slices.Contains(c.ScaffoldExcludes(), sub) {
 			t.Errorf("personal subdir %q must be excluded from scaffolding", sub)
 		}
 		// No trailing slash, so the symlink encave creates is also ignored.
-		if !has(c.GitignoreLines(), sub) {
+		if !slices.Contains(c.GitignoreLines(), sub) {
 			t.Errorf("personal subdir %q must be gitignored (no trailing slash so the symlink matches)", sub)
 		}
-		if has(c.GitignoreLines(), sub+"/") {
+		if slices.Contains(c.GitignoreLines(), sub+"/") {
 			t.Errorf("personal subdir %q should be gitignored as %q (no slash), not %q", sub, sub, sub+"/")
 		}
 	}
-	if !has(personal, "rules") {
+	if !slices.Contains(personal, "rules") {
 		t.Errorf("expected 'rules' among personal subdirs, got %v", personal)
 	}
 }
 
 func TestCodexIgnoresGeneratedState(t *testing.T) {
 	c := Codex{}
-	contains := func(list []string, want string) bool {
-		for _, s := range list {
-			if s == want {
-				return true
-			}
-		}
-		return false
-	}
 
 	// Machine-generated state that must be both scaffold-excluded and gitignored.
 	excludeWant := []string{
@@ -122,7 +107,7 @@ func TestCodexIgnoresGeneratedState(t *testing.T) {
 		"*.db", "version.json",
 	}
 	for _, w := range excludeWant {
-		if !contains(c.ScaffoldExcludes(), w) {
+		if !slices.Contains(c.ScaffoldExcludes(), w) {
 			t.Errorf("ScaffoldExcludes missing %q", w)
 		}
 	}
@@ -131,7 +116,7 @@ func TestCodexIgnoresGeneratedState(t *testing.T) {
 		"*.sqlite", "*.sqlite-wal", "*.sqlite-shm", "*.db", "version.json",
 	}
 	for _, w := range gitignoreWant {
-		if !contains(c.GitignoreLines(), w) {
+		if !slices.Contains(c.GitignoreLines(), w) {
 			t.Errorf("GitignoreLines missing %q", w)
 		}
 	}

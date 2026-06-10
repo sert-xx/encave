@@ -53,6 +53,42 @@ func TestCopyTreeExcludes(t *testing.T) {
 	}
 }
 
+func TestCopyTreeRootAnchoredExcludes(t *testing.T) {
+	src := t.TempDir()
+	mk := func(rel, content string) {
+		p := filepath.Join(src, rel)
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// A root-level state dir to drop, and a like-named dir nested inside authored
+	// content that must be KEPT.
+	mk("projects/session.jsonl", "{}")           // root state — excluded
+	mk("skills/notes/projects/data.md", "keep")  // authored content — kept
+	mk("settings.json", "{}")                    // root file — excluded
+	mk("skills/x/settings.json", "fixture-keep") // authored fixture — kept
+
+	dst := filepath.Join(t.TempDir(), "out")
+	excludes := []string{"/projects", "/settings.json"}
+	if _, err := CopyTree(src, dst, excludes); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, keep := range []string{"skills/notes/projects/data.md", "skills/x/settings.json"} {
+		if _, err := os.Stat(filepath.Join(dst, keep)); err != nil {
+			t.Errorf("root-anchored exclude wrongly pruned nested %s: %v", keep, err)
+		}
+	}
+	for _, drop := range []string{"projects/session.jsonl", "projects", "settings.json"} {
+		if _, err := os.Stat(filepath.Join(dst, drop)); !os.IsNotExist(err) {
+			t.Errorf("expected root %s to be excluded, but it exists", drop)
+		}
+	}
+}
+
 func TestCopyTreeRefusesExistingDest(t *testing.T) {
 	src := t.TempDir()
 	dst := t.TempDir() // already exists

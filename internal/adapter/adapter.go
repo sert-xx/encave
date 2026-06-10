@@ -13,7 +13,25 @@
 //     .gitignore.
 package adapter
 
-import "fmt"
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+)
+
+// baseHome resolves a target's personal home directory: the value of envVar when
+// set, otherwise <user home>/<dotDir>. Shared by the adapters, whose home
+// locations differ only in those two strings.
+func baseHome(envVar, dotDir string) (string, error) {
+	if h := os.Getenv(envVar); h != "" {
+		return h, nil
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("locating home directory: %w", err)
+	}
+	return filepath.Join(home, dotDir), nil
+}
 
 // LaunchRequest is the target-agnostic description of "run this agent now".
 // The adapter turns it into a concrete command line.
@@ -68,6 +86,26 @@ type Adapter interface {
 	// no env-based auth. It takes the resolved/effective config bytes, since the
 	// provider config may come from the user's home at launch.
 	AuthEnvVars(configData []byte) ([]string, error)
+
+	// ManagedAuth reports whether encave stores and injects this target's
+	// credential (Codex, true) versus the target managing its own login
+	// independently of the config dir (Claude Code, false). It drives user-facing
+	// guidance (e.g. the generated README and `encave auth` warnings); the launch
+	// path keys off AuthEnvVars.
+	ManagedAuth() bool
+
+	// CredentialNotes returns the markdown lines for the generated README's
+	// credential section for a target encave does NOT manage (ManagedAuth=false),
+	// describing how the user authenticates this specific target. ref is the
+	// agent's "owner/repo". Managed targets return nil (the README renders the
+	// keyring/auth-set flow instead), keeping target-specific auth prose inside the
+	// adapter rather than in the target-agnostic cli package.
+	CredentialNotes(ref string) []string
+
+	// ExampleInvocation returns the arguments shown after `--` in the generated
+	// README's run example (e.g. Codex ["exec", "..."], Claude Code ["-p", "..."]),
+	// so the example uses a subcommand/flag the target actually understands.
+	ExampleInvocation() []string
 
 	// BuildLaunch turns a LaunchRequest into a concrete command.
 	BuildLaunch(req LaunchRequest) (LaunchSpec, error)
