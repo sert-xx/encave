@@ -166,7 +166,10 @@ func (ClaudeCode) BuildBaseConfig(full []byte) ([]byte, error) {
 // deliberate: it is how their ANTHROPIC_BASE_URL and other settings continue to
 // apply in the isolated home. Prefer keeping credentials in your shell/keychain
 // rather than settings.json env.
-func (ClaudeCode) BuildEffectiveConfig(base, home []byte) ([]byte, error) {
+// prev is unused: Claude Code writes its runtime state (.credentials.json,
+// .claude.json, projects/, …) to separate files, never into settings.json, so
+// there is nothing to carry forward across regeneration.
+func (ClaudeCode) BuildEffectiveConfig(base, home, _ []byte) ([]byte, error) {
 	merged := map[string]any{}
 	if len(bytes.TrimSpace(home)) > 0 {
 		if err := json.Unmarshal(home, &merged); err != nil {

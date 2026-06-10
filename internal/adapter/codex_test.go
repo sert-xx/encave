@@ -201,7 +201,7 @@ func TestCodexBuildEffectiveConfigOverlay(t *testing.T) {
 	base := []byte("model = \"agent-model\"\n[model_providers.proxy]\nenv_key = \"PROXY_TOKEN\"\n")
 	home := []byte("model = \"user-model\"\n[projects.\"/home/me/proj\"]\ntrust_level = \"trusted\"\n[tui]\ntheme = \"dark\"\n")
 
-	out, err := Codex{}.BuildEffectiveConfig(base, home)
+	out, err := Codex{}.BuildEffectiveConfig(base, home, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -226,6 +226,77 @@ func TestCodexBuildEffectiveConfigOverlay(t *testing.T) {
 	}
 }
 
+func TestCodexBuildEffectiveConfigPreservesRuntimeTrust(t *testing.T) {
+	base := []byte(`model = "agent-model"` + "\n")
+	home := []byte("[projects.\"/home/me/from-home\"]\ntrust_level = \"trusted\"\n")
+	// The live config.toml Codex maintained: it has the home project plus a project
+	// the user trusted at runtime, hook trust, and a dismissed notice.
+	prev := []byte(`model = "stale-model"
+
+[projects."/home/me/from-home"]
+trust_level = "trusted"
+
+[projects."/home/me/runtime-trusted"]
+trust_level = "trusted"
+
+[hooks.state."/tmp/h.json:pre_tool_use:0:0"]
+enabled = true
+trusted_hash = "sha256:abc"
+
+[notice]
+hide_rate_limit_model_nudge = true
+`)
+
+	out, err := Codex{}.BuildEffectiveConfig(base, home, prev)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var m map[string]any
+	if err := toml.Unmarshal(out, &m); err != nil {
+		t.Fatal(err)
+	}
+
+	// Agent base still wins over the stale runtime model.
+	if m["model"] != "agent-model" {
+		t.Errorf("model = %v, want agent-model (base wins over prev)", m["model"])
+	}
+	projects, ok := m["projects"].(map[string]any)
+	if !ok {
+		t.Fatalf("projects missing: %#v", m["projects"])
+	}
+	// Both the home-defined and the runtime-trusted projects survive.
+	for _, p := range []string{"/home/me/from-home", "/home/me/runtime-trusted"} {
+		if _, ok := projects[p]; !ok {
+			t.Errorf("project trust %q was not preserved", p)
+		}
+	}
+	// Hook trust carried forward.
+	hooks, ok := m["hooks"].(map[string]any)
+	if !ok {
+		t.Fatalf("hooks missing: %#v", m["hooks"])
+	}
+	if _, ok := hooks["state"].(map[string]any); !ok {
+		t.Errorf("hooks.state was not preserved: %#v", hooks)
+	}
+	// Dismissed notice carried forward.
+	if _, ok := m["notice"]; !ok {
+		t.Error("notice (dismissed warnings) was not preserved")
+	}
+
+	// First launch (no prev) must not invent these tables.
+	out0, err := Codex{}.BuildEffectiveConfig(base, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var m0 map[string]any
+	if err := toml.Unmarshal(out0, &m0); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := m0["hooks"]; ok {
+		t.Error("no prev: hooks should be absent, not fabricated")
+	}
+}
+
 func TestCodexBuildEffectiveConfigForcesAuthWiring(t *testing.T) {
 	// Provider from the user's home with NO env_key, plus Codex's own credential
 	// store enabled. The generated config must drop the store and force env_key.
@@ -240,7 +311,7 @@ wire_api = "responses"
 `)
 	base := []byte(`model = "agent-model"` + "\n")
 
-	out, err := Codex{}.BuildEffectiveConfig(base, home)
+	out, err := Codex{}.BuildEffectiveConfig(base, home, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -113,7 +113,7 @@ func TestClaudeBuildEffectiveConfigOverlay(t *testing.T) {
 	base := []byte(`{"model": "agent-model", "permissions": {"allow": ["Read"]}}`)
 	home := []byte(`{"model": "user-model", "env": {"ANTHROPIC_BASE_URL": "https://gw.example.com"}, "editorMode": "vim"}`)
 
-	out, err := ClaudeCode{}.BuildEffectiveConfig(base, home)
+	out, err := ClaudeCode{}.BuildEffectiveConfig(base, home, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
