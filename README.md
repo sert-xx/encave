@@ -245,10 +245,16 @@ An agent's name **is** its GitHub identity (`<owner>/<repo>`), so `new` and
 "drafts" area, and you can run and iterate on your own agent before publishing it.
 
 ```sh
-encave new dai/review-agent        # copy ~/.codex into a new agent, filtering secrets/state
+encave new dai/review-agent        # prompts for the target, then copies that home, filtering secrets/state
 encave dai/review-agent            # try it locally before publishing
-# ... tune agents/, skills/, config.toml ...
+# ... tune agents/, skills/, the base config ...
 ```
+
+When you omit `--target`, `new` prompts you to choose the target CLI (Codex or
+Claude Code) on a terminal; pass `--target claude-code` (or `--target codex`) to
+skip the prompt, e.g. in scripts. Off a terminal it falls back to the default
+target (`codex`). The source home copied follows the chosen target
+(`~/.codex` / `~/.claude`), overridable with `--from`.
 
 `encave new` also generates a `README.md` template in the agent (unless you pass
 `--no-readme`), replacing any README copied from your base home — that generic

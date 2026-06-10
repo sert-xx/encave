@@ -241,10 +241,15 @@ symlink は `new`・`install`・`run` によって（再）作成されます。
 領域はなく、公開する前に自分のエージェントを実行して反復できます。
 
 ```sh
-encave new dai/review-agent        # ~/.codex を新しいエージェントへコピー、秘密情報/状態を除外
+encave new dai/review-agent        # ターゲットを尋ねてから、そのホームをコピー（秘密情報/状態を除外）
 encave dai/review-agent            # 公開前にローカルで試す
-# ... agents/, skills/, config.toml を調整 ...
+# ... agents/, skills/, base 設定を調整 ...
 ```
+
+`--target` を省略すると、端末ではターゲット CLI（Codex か Claude Code）を対話的に選びます。
+`--target claude-code`（または `--target codex`）を渡せばプロンプトをスキップできます（スクリプト用）。
+端末でない場合は既定ターゲット（`codex`）にフォールバックします。コピー元ホームは選んだ
+ターゲットに従います（`~/.codex` / `~/.claude`）。`--from` で上書き可能です。
 
 `encave new` はエージェント内に `README.md` テンプレートも生成します（`--no-readme` を
 渡さない限り）。ベースホームからコピーされた README は置き換えられます — あの汎用的な

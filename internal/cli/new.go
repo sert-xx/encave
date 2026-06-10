@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/sert-xx/encave/internal/adapter"
@@ -21,12 +22,13 @@ import (
 // only initial cleaning; the real gate is the publish-time scan.
 func cmdNew(args []string) int {
 	fs := flag.NewFlagSet("new", flag.ContinueOnError)
-	target := fs.String("target", adapter.DefaultName, "target CLI the agent is built for")
+	target := fs.String("target", "", "target CLI the agent is built for (prompted if omitted)")
 	from := fs.String("from", "", "source home to copy (default: target's base home, e.g. ~/.codex)")
 	force := fs.Bool("force", false, "overwrite an existing draft of the same name")
 	noReadme := fs.Bool("no-readme", false, "do not generate a README.md template")
 	fs.Usage = func() {
-		fmt.Fprintln(os.Stderr, "usage: encave new <owner>/<repo> [--target codex] [--from <dir>] [--force] [--no-readme]")
+		fmt.Fprintln(os.Stderr, "usage: encave new <owner>/<repo> [--target <name>] [--from <dir>] [--force] [--no-readme]")
+		fmt.Fprintln(os.Stderr, "  --target omitted: choose interactively (the default target off a terminal).")
 		fs.PrintDefaults()
 	}
 	pos, ok := parseOnePositional(fs, args)
@@ -40,7 +42,11 @@ func cmdNew(args []string) int {
 		return 2
 	}
 
-	ad, err := adapter.Get(*target)
+	targetName, ok := chooseTarget(*target)
+	if !ok {
+		return 1
+	}
+	ad, err := adapter.Get(targetName)
 	if err != nil {
 		errf("%v", err)
 		return 2
@@ -179,6 +185,38 @@ func cmdNew(args []string) int {
 	fmt.Printf("  2. Try it locally:  encave %s\n", ref)
 	fmt.Printf("  3. Publish it:      encave publish %s --tag v1.0.0\n", ref)
 	return 0
+}
+
+// chooseTarget resolves the target adapter for `new`. An explicit --target wins.
+// Otherwise, with a single registered target it is used directly; an interactive
+// session prompts the user to pick one (so Claude Code users aren't silently
+// given the Codex default); and a non-interactive session falls back to the
+// default target so scripts keep working without a flag. ok=false means the user
+// cancelled the prompt.
+func chooseTarget(explicit string) (string, bool) {
+	if explicit != "" {
+		return explicit, true
+	}
+	names := adapter.Names()
+	sort.Strings(names)
+	if len(names) == 1 {
+		return names[0], true
+	}
+	if !isInteractive() {
+		return adapter.DefaultName, true
+	}
+	labels := make([]string, len(names))
+	for i, n := range names {
+		labels[i] = n
+		if n == adapter.DefaultName {
+			labels[i] += "   (default)"
+		}
+	}
+	idx, ok := selectFromList("Select the target CLI for this agent (↑/↓, Enter; q to cancel):", labels)
+	if !ok {
+		return "", false
+	}
+	return names[idx], true
 }
 
 // maybeWriteReadme writes the README.md template into the agent, always
