@@ -108,11 +108,15 @@ silent background install:
 - **agents:** see [Using a shared agent](#using-a-shared-agent) — `encave run`
   offers to update an agent when its origin has a newer release tag.
 
-Checks are best-effort and quiet: they run at most once per day per target, only
-when attached to a terminal, and a release version (not a `make build` dev
-binary) is required for the self-check. They never block, and any network or
-proxy error is silently skipped. The encave check honors your `GOPROXY`. Set
-`ENCAVE_NO_UPDATE_CHECK=1` to turn all of this off.
+Both checks read **git release tags** directly (encave's own from its repository,
+an agent's from its `origin`), so a freshly pushed tag is detected promptly —
+unlike the module proxy's `@latest`, which lags. The network is consulted at most
+about once an hour per target, but once an update is known it is re-offered on
+every run until you install it or decline that specific version (a newer version
+re-prompts). Checks only run when attached to a terminal, the self-check needs a
+release version (not a `make build` dev binary), they never block, and any
+network error is silently skipped. Set `ENCAVE_NO_UPDATE_CHECK=1` to turn all of
+this off.
 
 ## Quick start (using a shared agent)
 
@@ -405,11 +409,10 @@ Credentials live only in the OS keyring under the `encave` service.
   `Resolve`, is used solely on the launch path.
 - `internal/scan` — the fail-closed secret scanner used by `publish`.
 - `internal/fsutil` — recursive copy with exclusions, used by `new`.
-- `internal/gitutil` — thin wrappers over the `git` CLI.
+- `internal/gitutil` — thin wrappers over the `git` CLI (including the
+  `ls-remote`/`fetch` tag lookups behind the update checks).
 - `internal/semver` — parse/compare `vX.Y.Z` versions (release tags and encave's
   own version).
-- `internal/modproxy` — best-effort lookup of encave's latest version from the Go
-  module proxy, for the self-update check.
 - `internal/cli` — command dispatch (including the implicit `run`) and handlers.
 
 ## Status

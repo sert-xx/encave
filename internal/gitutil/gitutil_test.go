@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func TestNextPatch(t *testing.T) {
@@ -54,5 +55,55 @@ func TestHasCommits(t *testing.T) {
 	}
 	if !HasCommits(dir) {
 		t.Error("repo with a commit should report HasCommits=true")
+	}
+}
+
+func TestLatestRemoteSemverTag(t *testing.T) {
+	if !Available() {
+		t.Skip("git not available")
+	}
+	t.Setenv("GIT_CONFIG_GLOBAL", "/dev/null")
+	t.Setenv("GIT_CONFIG_SYSTEM", "/dev/null")
+	t.Setenv("GIT_AUTHOR_NAME", "T")
+	t.Setenv("GIT_AUTHOR_EMAIL", "t@e.com")
+	t.Setenv("GIT_COMMITTER_NAME", "T")
+	t.Setenv("GIT_COMMITTER_EMAIL", "t@e.com")
+
+	dir := t.TempDir()
+	if err := Init(dir); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "f"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := AddPaths(dir, "f"); err != nil {
+		t.Fatal(err)
+	}
+	if err := Commit(dir, "init"); err != nil {
+		t.Fatal(err)
+	}
+	// Mix semver and non-semver tags; v0.10.0 must beat v0.9.0 numerically.
+	for _, tag := range []string{"v0.1.0", "v0.9.0", "v0.10.0", "nightly"} {
+		if err := Tag(dir, tag, tag); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// ls-remote works against a local repository path (no network).
+	got, err := LatestRemoteSemverTag(dir, 10*time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "v0.10.0" {
+		t.Fatalf("LatestRemoteSemverTag = %q, want v0.10.0", got)
+	}
+
+	// A repo with no semver tags yields "".
+	empty := t.TempDir()
+	if err := Init(empty); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := LatestRemoteSemverTag(empty, 10*time.Second); err != nil || got != "" {
+		t.Fatalf("empty repo: got (%q, %v), want (\"\", nil)", got, err)
 	}
 }
