@@ -7,10 +7,12 @@ package gitutil
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"os/exec"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/sert-xx/encave/internal/semver"
 )
@@ -33,6 +35,66 @@ func Run(dir string, args ...string) (string, error) {
 		return "", fmt.Errorf("git %s: %s", strings.Join(args, " "), msg)
 	}
 	return strings.TrimSpace(stdout.String()), nil
+}
+
+// RunTimeout is Run with a hard timeout, for the network git operations used by
+// update checks (ls-remote, fetch) so a slow or hung remote never blocks an
+// interactive command indefinitely.
+func RunTimeout(dir string, timeout time.Duration, args ...string) (string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "git", args...)
+	if dir != "" {
+		cmd.Dir = dir
+	}
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		msg := strings.TrimSpace(stderr.String())
+		if ctx.Err() == context.DeadlineExceeded {
+			msg = "timed out"
+		}
+		if msg == "" {
+			msg = err.Error()
+		}
+		return "", fmt.Errorf("git %s: %s", strings.Join(args, " "), msg)
+	}
+	return strings.TrimSpace(stdout.String()), nil
+}
+
+// LatestRemoteSemverTag returns the highest vMAJOR.MINOR.PATCH tag advertised by
+// a remote repository URL via `git ls-remote`, or "" if none. Unlike the Go
+// module proxy's @latest, this reflects a freshly pushed tag immediately.
+func LatestRemoteSemverTag(url string, timeout time.Duration) (string, error) {
+	out, err := RunTimeout("", timeout, "ls-remote", "--tags", "--refs", url)
+	if err != nil {
+		return "", err
+	}
+	var best []int
+	var bestTag string
+	for _, line := range strings.Split(out, "\n") {
+		i := strings.Index(line, "refs/tags/")
+		if i < 0 {
+			continue
+		}
+		tag := strings.TrimSpace(line[i+len("refs/tags/"):])
+		v := parseSemver(tag)
+		if v == nil {
+			continue
+		}
+		if best == nil || lessSemver(best, v) {
+			best, bestTag = v, tag
+		}
+	}
+	return bestTag, nil
+}
+
+// FetchTimeout runs `git fetch` in dir with a hard timeout (for best-effort
+// update checks that must not hang a launch).
+func FetchTimeout(dir string, timeout time.Duration, args ...string) error {
+	_, err := RunTimeout(dir, timeout, append([]string{"fetch"}, args...)...)
+	return err
 }
 
 // Available reports whether the git binary is on PATH.
