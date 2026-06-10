@@ -387,7 +387,11 @@ func resolveEffectiveConfig(ad adapter.Adapter, agentDir string) (data []byte, w
 			homeData = hd
 		}
 	}
-	merged, merr := ad.BuildEffectiveConfig(baseData, homeData)
+	// The existing effective config may hold runtime state the target wrote (e.g.
+	// Codex project/hook trust); pass it so the adapter can carry it forward
+	// instead of resetting it on every launch.
+	prevData, _ := os.ReadFile(filepath.Join(agentDir, eff))
+	merged, merr := ad.BuildEffectiveConfig(baseData, homeData, prevData)
 	if merr != nil {
 		return nil, "", false, merr
 	}

@@ -139,8 +139,12 @@ type Adapter interface {
 
 	// BuildEffectiveConfig merges the committed base config over the user's home
 	// config so the user's environment-specific settings apply while the agent's
-	// keys win. Used by `run`; homeConfig may be empty.
-	BuildEffectiveConfig(baseConfig, homeConfig []byte) ([]byte, error)
+	// keys win. Used by `run`; homeConfig may be empty. prevConfig, when non-empty,
+	// is the effective config the target previously wrote into (e.g. the existing
+	// config.toml); an adapter uses it to carry forward runtime-owned state — such
+	// as Codex project/hook trust — so regeneration does not reset it. Targets that
+	// write such state to other files ignore prevConfig.
+	BuildEffectiveConfig(baseConfig, homeConfig, prevConfig []byte) ([]byte, error)
 
 	// MCPServers parses a full target config and returns the MCP servers it
 	// declares. These are not packaged (reusing someone else's MCP server config

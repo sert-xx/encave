@@ -110,8 +110,11 @@ func (Codex) BuildBaseConfig(full []byte) ([]byte, error) {
 
 // BuildEffectiveConfig implements Adapter: overlay the agent's base config over
 // the user's home config at the top level. The agent's keys win; every other key
-// (project trust, UI, paths, telemetry, …) comes from the user's home.
-func (Codex) BuildEffectiveConfig(base, home []byte) ([]byte, error) {
+// (project trust, UI, paths, telemetry, …) comes from the user's home. Codex
+// also writes runtime trust state (project/hook trust) into config.toml, which a
+// full regeneration would otherwise wipe; carryCodexRuntimeState restores those
+// tables from prev (the existing config.toml).
+func (Codex) BuildEffectiveConfig(base, home, prev []byte) ([]byte, error) {
 	merged := map[string]any{}
 	if len(bytes.TrimSpace(home)) > 0 {
 		if err := toml.Unmarshal(home, &merged); err != nil {
@@ -140,7 +143,59 @@ func (Codex) BuildEffectiveConfig(base, home []byte) ([]byte, error) {
 		}
 	}
 
+	carryCodexRuntimeState(merged, prev)
+
 	return encodeTOML(merged)
+}
+
+// carryCodexRuntimeState restores into merged the trust/UX state Codex writes
+// back into config.toml at runtime, which encave's full-file regeneration would
+// otherwise reset every launch (see the openai/codex config model: project trust
+// at [projects."<path>"].trust_level, hook trust at [hooks.state.*]). prev is the
+// existing config.toml; an unparseable or empty prev is simply skipped (best
+// effort — never fail a launch over preservation).
+func carryCodexRuntimeState(merged map[string]any, prev []byte) {
+	if len(bytes.TrimSpace(prev)) == 0 {
+		return
+	}
+	var p map[string]any
+	if err := toml.Unmarshal(prev, &p); err != nil {
+		return
+	}
+
+	// Project trust: keep the agent/home-derived projects, then add any project
+	// the user trusted at runtime that the home config doesn't already define.
+	if pp, ok := p["projects"].(map[string]any); ok && len(pp) > 0 {
+		dst, _ := merged["projects"].(map[string]any)
+		if dst == nil {
+			dst = map[string]any{}
+		}
+		for path, cfg := range pp {
+			if _, fromHome := dst[path]; !fromHome {
+				dst[path] = cfg
+			}
+		}
+		merged["projects"] = dst
+	}
+
+	// Hook trust ([hooks.state.*]) is pure runtime state; carry it forward without
+	// disturbing any hook event definitions the agent/home config declares.
+	if ph, ok := p["hooks"].(map[string]any); ok {
+		if state, ok := ph["state"]; ok {
+			dh, _ := merged["hooks"].(map[string]any)
+			if dh == nil {
+				dh = map[string]any{}
+			}
+			dh["state"] = state
+			merged["hooks"] = dh
+		}
+	}
+
+	// Dismissed-notice flags ([notice]) are runtime UX state with no agent/home
+	// authority; preserve them so warnings don't reappear every launch.
+	if n, ok := p["notice"]; ok {
+		merged["notice"] = n
+	}
 }
 
 // encodeTOML serializes a map to TOML bytes using [table] headers with dotted
