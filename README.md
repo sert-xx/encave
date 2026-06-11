@@ -68,7 +68,7 @@ process's lifetime.
 ```sh
 # install a specific release — use the newest tag from the Releases page:
 # https://github.com/sert-xx/encave/releases
-go install github.com/sert-xx/encave@v0.8.0
+go install github.com/sert-xx/encave@v0.9.2
 ```
 
 > Prefer the latest release tag over `@latest`: the module proxy's `@latest`
